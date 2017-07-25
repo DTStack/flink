@@ -91,6 +91,9 @@ public class ZooKeeperUtils {
 		boolean disableSaslClient = configuration.getBoolean(ConfigConstants.ZOOKEEPER_SASL_DISABLE,
 				ConfigConstants.DEFAULT_ZOOKEEPER_SASL_DISABLE);
 
+		//1.3中会在zookeeperModule中修复
+		System.setProperty("zookeeper.sasl.client", String.valueOf(!disableSaslClient));
+
 		ACLProvider aclProvider;
 
 		ZkClientACLMode aclMode = ZkClientACLMode.fromConfig(configuration);

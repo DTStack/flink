@@ -23,7 +23,7 @@ import java.net.URLClassLoader;
 /**
  * Gives the URLClassLoader a nicer name for debugging purposes.
  */
-public class FlinkUserCodeClassLoader extends URLClassLoader {
+public class FlinkUserCodeClassLoader extends DtClassLoader {
 
 	public FlinkUserCodeClassLoader(URL[] urls) {
 		this(urls, FlinkUserCodeClassLoader.class.getClassLoader());
