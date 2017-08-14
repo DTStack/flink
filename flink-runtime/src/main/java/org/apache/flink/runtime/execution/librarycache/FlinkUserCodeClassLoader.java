@@ -18,7 +18,6 @@
 package org.apache.flink.runtime.execution.librarycache;
 
 import java.net.URL;
-import java.net.URLClassLoader;
 
 /**
  * Gives the URLClassLoader a nicer name for debugging purposes.
