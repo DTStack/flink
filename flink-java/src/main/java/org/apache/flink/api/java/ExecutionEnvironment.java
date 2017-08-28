@@ -105,7 +105,7 @@ public abstract class ExecutionEnvironment {
 	protected static final Logger LOG = LoggerFactory.getLogger(ExecutionEnvironment.class);
 
 	/** The environment of the context (local by default, cluster if invoked through command line) */
-	private static ExecutionEnvironmentFactory contextEnvironmentFactory;
+	private static ThreadLocal<ExecutionEnvironmentFactory> contextEnvironmentFactory = new ThreadLocal<>();
 
 	/** The default parallelism used by local environments */
 	private static int defaultLocalDop = Runtime.getRuntime().availableProcessors();
@@ -1165,8 +1165,8 @@ public abstract class ExecutionEnvironment {
 	 * @return The execution environment of the context in which the program is executed.
 	 */
 	public static ExecutionEnvironment getExecutionEnvironment() {
-		return contextEnvironmentFactory == null ? 
-				createLocalEnvironment() : contextEnvironmentFactory.createExecutionEnvironment();
+		return contextEnvironmentFactory.get() == null ?
+			createLocalEnvironment() : contextEnvironmentFactory.get().createExecutionEnvironment();
 	}
 
 	/**
@@ -1343,7 +1343,7 @@ public abstract class ExecutionEnvironment {
 	 * @param ctx The context environment factory.
 	 */
 	protected static void initializeContextEnvironment(ExecutionEnvironmentFactory ctx) {
-		contextEnvironmentFactory = Preconditions.checkNotNull(ctx);
+		contextEnvironmentFactory.set(Preconditions.checkNotNull(ctx));
 	}
 
 	/**
