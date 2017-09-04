@@ -1352,7 +1352,7 @@ public abstract class ExecutionEnvironment {
 	 * it is possible to explicitly instantiate the LocalEnvironment and the RemoteEnvironment.
 	 */
 	protected static void resetContextEnvironment() {
-		contextEnvironmentFactory = null;
+		contextEnvironmentFactory.set(null);
 	}
 
 	/**
@@ -1364,6 +1364,6 @@ public abstract class ExecutionEnvironment {
 	 */
 	@Internal
 	public static boolean areExplicitEnvironmentsAllowed() {
-		return contextEnvironmentFactory == null;
+		return contextEnvironmentFactory.get() == null;
 	}
 }
