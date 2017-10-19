@@ -24,27 +24,27 @@ under the License.
 
 	<parent>
 		<groupId>org.apache.flink</groupId>
-		<artifactId>flink-examples_2.10</artifactId>
+		<artifactId>flink-examples_2.11</artifactId>
 		<version>1.3-SNAPSHOT</version>
 		<relativePath>..</relativePath>
 	</parent>
 
 	<name>flink-examples-table</name>
-	<artifactId>flink-examples-table_2.10</artifactId>
+	<artifactId>flink-examples-table_2.11</artifactId>
 	<packaging>jar</packaging>
 
 	<dependencies>
 
 		<dependency>
 			<groupId>org.apache.flink</groupId>
-			<artifactId>flink-table_2.10</artifactId>
+			<artifactId>flink-table_2.11</artifactId>
 			<version>${project.version}</version>
 			<scope>compile</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>org.apache.flink</groupId>
-			<artifactId>flink-streaming-scala_2.10</artifactId>
+			<artifactId>flink-streaming-scala_2.11</artifactId>
 			<version>${project.version}</version>
 			<scope>compile</scope>
 		</dependency>

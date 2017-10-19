@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -116,7 +117,8 @@ public abstract class AbstractMetricGroup<A extends AbstractMetricGroup<?>> impl
 					if (parent != null) {
 						variables = parent.getAllVariables();
 					} else { // this case should only be true for mock groups
-						variables = new HashMap<>();
+						//variables = new HashMap<>();
+						variables = new ConcurrentHashMap<>();
 					}
 				}
 			}

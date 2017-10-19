@@ -491,7 +491,7 @@ under the License.
 			<id>scala-2.11</id>
 			<activation>
 				<property>
-					<name>scala-2.11</name>
+					<name>!scala-2.11</name>
 				</property>
 			</activation>
 			<properties>

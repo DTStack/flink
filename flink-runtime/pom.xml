@@ -29,10 +29,14 @@ under the License.
 		<relativePath>..</relativePath>
 	</parent>
 
-	<artifactId>flink-runtime_2.10</artifactId>
+	<artifactId>flink-runtime_2.11</artifactId>
 	<name>flink-runtime</name>
 
 	<packaging>jar</packaging>
+
+	<properties>
+		<checkstyle.skip>true</checkstyle.skip>
+	</properties>
 
 	<dependencies>
 
