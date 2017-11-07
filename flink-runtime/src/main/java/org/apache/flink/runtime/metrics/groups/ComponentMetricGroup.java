@@ -23,6 +23,7 @@ import org.apache.flink.runtime.metrics.MetricRegistry;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Abstract {@link org.apache.flink.metrics.MetricGroup} for system components (e.g., 
@@ -57,7 +58,7 @@ public abstract class ComponentMetricGroup<P extends AbstractMetricGroup<?>> ext
 		if (variables == null) { // avoid synchronization for common case
 			synchronized (this) {
 				if (variables == null) {
-					variables = new HashMap<>();
+					variables = new ConcurrentHashMap<>();
 					putVariables(variables);
 					if (parent != null) { // not true for Job-/TaskManagerMetricGroup
 						variables.putAll(parent.getAllVariables());
