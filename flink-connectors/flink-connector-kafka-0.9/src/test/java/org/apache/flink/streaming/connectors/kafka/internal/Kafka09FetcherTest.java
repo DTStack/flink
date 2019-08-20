@@ -18,17 +18,18 @@
 
 package org.apache.flink.streaming.connectors.kafka.internal;
 
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.core.testutils.MultiShotLatch;
 import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
 import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext;
 import org.apache.flink.streaming.api.watermark.Watermark;
+import org.apache.flink.streaming.connectors.kafka.KafkaDeserializationSchema;
+import org.apache.flink.streaming.connectors.kafka.internals.KafkaCommitCallback;
+import org.apache.flink.streaming.connectors.kafka.internals.KafkaDeserializationSchemaWrapper;
 import org.apache.flink.streaming.connectors.kafka.internals.KafkaTopicPartition;
 import org.apache.flink.streaming.connectors.kafka.internals.KafkaTopicPartitionStateSentinel;
 import org.apache.flink.streaming.runtime.tasks.TestProcessingTimeService;
-import org.apache.flink.streaming.util.serialization.KeyedDeserializationSchema;
-import org.apache.flink.streaming.util.serialization.KeyedDeserializationSchemaWrapper;
-import org.apache.flink.streaming.util.serialization.SimpleStringSchema;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -114,7 +115,7 @@ public class Kafka09FetcherTest {
 		SourceContext<String> sourceContext = mock(SourceContext.class);
 		Map<KafkaTopicPartition, Long> partitionsWithInitialOffsets =
 			Collections.singletonMap(new KafkaTopicPartition("test", 42), KafkaTopicPartitionStateSentinel.GROUP_OFFSET);
-		KeyedDeserializationSchema<String> schema = new KeyedDeserializationSchemaWrapper<>(new SimpleStringSchema());
+		KafkaDeserializationSchema<String> schema = new KafkaDeserializationSchemaWrapper<>(new SimpleStringSchema());
 
 		final Kafka09Fetcher<String> fetcher = new Kafka09Fetcher<>(
 				sourceContext,
@@ -125,11 +126,12 @@ public class Kafka09FetcherTest {
 				10, /* watermark interval */
 				this.getClass().getClassLoader(),
 				"task_name",
-				new UnregisteredMetricsGroup(),
 				schema,
 				new Properties(),
 				0L,
-				false);
+				new UnregisteredMetricsGroup(),
+				new UnregisteredMetricsGroup(),
+				false, null);
 
 		// ----- run the fetcher -----
 
@@ -157,7 +159,7 @@ public class Kafka09FetcherTest {
 			@Override
 			public void run() {
 				try {
-					fetcher.commitInternalOffsetsToKafka(testCommitData);
+					fetcher.commitInternalOffsetsToKafka(testCommitData, mock(KafkaCommitCallback.class));
 				} catch (Throwable t) {
 					commitError.set(t);
 				}
@@ -249,7 +251,7 @@ public class Kafka09FetcherTest {
 		SourceContext<String> sourceContext = mock(SourceContext.class);
 		Map<KafkaTopicPartition, Long> partitionsWithInitialOffsets =
 			Collections.singletonMap(new KafkaTopicPartition("test", 42), KafkaTopicPartitionStateSentinel.GROUP_OFFSET);
-		KeyedDeserializationSchema<String> schema = new KeyedDeserializationSchemaWrapper<>(new SimpleStringSchema());
+		KafkaDeserializationSchema<String> schema = new KafkaDeserializationSchemaWrapper<>(new SimpleStringSchema());
 
 		final Kafka09Fetcher<String> fetcher = new Kafka09Fetcher<>(
 				sourceContext,
@@ -260,11 +262,12 @@ public class Kafka09FetcherTest {
 				10, /* watermark interval */
 				this.getClass().getClassLoader(),
 				"task_name",
-				new UnregisteredMetricsGroup(),
 				schema,
 				new Properties(),
 				0L,
-				false);
+				new UnregisteredMetricsGroup(),
+				new UnregisteredMetricsGroup(),
+				false, null);
 
 		// ----- run the fetcher -----
 
@@ -284,7 +287,7 @@ public class Kafka09FetcherTest {
 
 		// ----- trigger the first offset commit -----
 
-		fetcher.commitInternalOffsetsToKafka(testCommitData1);
+		fetcher.commitInternalOffsetsToKafka(testCommitData1, mock(KafkaCommitCallback.class));
 		Map<TopicPartition, OffsetAndMetadata> result1 = commitStore.take();
 
 		for (Entry<TopicPartition, OffsetAndMetadata> entry : result1.entrySet()) {
@@ -301,7 +304,7 @@ public class Kafka09FetcherTest {
 
 		// ----- trigger the second offset commit -----
 
-		fetcher.commitInternalOffsetsToKafka(testCommitData2);
+		fetcher.commitInternalOffsetsToKafka(testCommitData2, mock(KafkaCommitCallback.class));
 		Map<TopicPartition, OffsetAndMetadata> result2 = commitStore.take();
 
 		for (Entry<TopicPartition, OffsetAndMetadata> entry : result2.entrySet()) {
@@ -337,9 +340,9 @@ public class Kafka09FetcherTest {
 		final byte[] payload = new byte[] {1, 2, 3, 4};
 
 		final List<ConsumerRecord<byte[], byte[]>> records = Arrays.asList(
-				new ConsumerRecord<byte[], byte[]>(topic, partition, 15, payload, payload),
-				new ConsumerRecord<byte[], byte[]>(topic, partition, 16, payload, payload),
-				new ConsumerRecord<byte[], byte[]>(topic, partition, 17, payload, payload));
+				new ConsumerRecord<>(topic, partition, 15, payload, payload),
+				new ConsumerRecord<>(topic, partition, 16, payload, payload),
+				new ConsumerRecord<>(topic, partition, 17, payload, payload));
 
 		final Map<TopicPartition, List<ConsumerRecord<byte[], byte[]>>> data = new HashMap<>();
 		data.put(new TopicPartition(topic, partition), records);
@@ -363,7 +366,7 @@ public class Kafka09FetcherTest {
 		BlockingSourceContext<String> sourceContext = new BlockingSourceContext<>();
 		Map<KafkaTopicPartition, Long> partitionsWithInitialOffsets =
 			Collections.singletonMap(new KafkaTopicPartition(topic, partition), KafkaTopicPartitionStateSentinel.GROUP_OFFSET);
-		KeyedDeserializationSchema<String> schema = new KeyedDeserializationSchemaWrapper<>(new SimpleStringSchema());
+		KafkaDeserializationSchema<String> schema = new KafkaDeserializationSchemaWrapper<>(new SimpleStringSchema());
 
 		final Kafka09Fetcher<String> fetcher = new Kafka09Fetcher<>(
 				sourceContext,
@@ -374,11 +377,12 @@ public class Kafka09FetcherTest {
 				10, /* watermark interval */
 				this.getClass().getClassLoader(),
 				"task_name",
-				new UnregisteredMetricsGroup(),
 				schema,
 				new Properties(),
 				0L,
-				false);
+				new UnregisteredMetricsGroup(),
+				new UnregisteredMetricsGroup(),
+				false, null);
 
 		// ----- run the fetcher -----
 
@@ -445,11 +449,11 @@ public class Kafka09FetcherTest {
 		@Override
 		public void close() {}
 
-		public void waitTillHasBlocker() throws InterruptedException {
+		void waitTillHasBlocker() throws InterruptedException {
 			inBlocking.await();
 		}
 
-		public boolean isStillBlocking() {
+		boolean isStillBlocking() {
 			return lock.isLocked();
 		}
 

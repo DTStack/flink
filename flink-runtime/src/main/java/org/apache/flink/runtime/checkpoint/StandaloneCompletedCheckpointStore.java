@@ -20,7 +20,7 @@ package org.apache.flink.runtime.checkpoint;
 
 import org.apache.flink.runtime.jobgraph.JobStatus;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
-import org.apache.flink.runtime.state.SharedStateRegistry;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,7 +57,7 @@ public class StandaloneCompletedCheckpointStore implements CompletedCheckpointSt
 	}
 
 	@Override
-	public void recover(SharedStateRegistry sharedStateRegistry) throws Exception {
+	public void recover() throws Exception {
 		// Nothing to do
 	}
 
@@ -74,11 +74,6 @@ public class StandaloneCompletedCheckpointStore implements CompletedCheckpointSt
 				LOG.warn("Fail to subsume the old checkpoint.", e);
 			}
 		}
-	}
-
-	@Override
-	public CompletedCheckpoint getLatestCheckpoint() {
-		return checkpoints.isEmpty() ? null : checkpoints.getLast();
 	}
 
 	@Override

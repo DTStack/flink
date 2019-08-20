@@ -21,11 +21,14 @@ package org.apache.flink.client.program;
 import org.apache.flink.api.common.Plan;
 import org.apache.flink.api.common.Program;
 import org.apache.flink.api.common.ProgramDescription;
+import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.optimizer.Optimizer;
 import org.apache.flink.optimizer.dag.DataSinkNode;
 import org.apache.flink.optimizer.plandump.PlanJSONDumpGenerator;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.util.InstantiationUtil;
+
+import javax.annotation.Nullable;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -41,6 +44,12 @@ import java.lang.reflect.Modifier;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -87,6 +96,11 @@ public class PackagedProgram {
 	private Plan plan;
 
 	private SavepointRestoreSettings savepointSettings = SavepointRestoreSettings.none();
+
+	/**
+	 * Flag indicating whether the job is a Python job.
+	 */
+	private final boolean isPython;
 
 	/**
 	 * Creates an instance that wraps the plan defined in the jar file using the given
@@ -143,7 +157,7 @@ public class PackagedProgram {
 	 *         This invocation is thrown if the Program can't be properly loaded. Causes
 	 *         may be a missing / wrong class or manifest files.
 	 */
-	public PackagedProgram(File jarFile, String entryPointClassName, String... args) throws ProgramInvocationException {
+	public PackagedProgram(File jarFile, @Nullable String entryPointClassName, String... args) throws ProgramInvocationException {
 		this(jarFile, Collections.<URL>emptyList(), entryPointClassName, args);
 	}
 
@@ -166,19 +180,23 @@ public class PackagedProgram {
 	 *         This invocation is thrown if the Program can't be properly loaded. Causes
 	 *         may be a missing / wrong class or manifest files.
 	 */
-	public PackagedProgram(File jarFile, List<URL> classpaths, String entryPointClassName, String... args) throws ProgramInvocationException {
-		if (jarFile == null) {
+	public PackagedProgram(File jarFile, List<URL> classpaths, @Nullable String entryPointClassName, String... args) throws ProgramInvocationException {
+		// Whether the job is a Python job.
+		isPython = entryPointClassName != null && (entryPointClassName.equals("org.apache.flink.client.python.PythonDriver")
+			|| entryPointClassName.equals("org.apache.flink.client.python.PythonGatewayServer"));
+
+		URL jarFileUrl = null;
+		if (jarFile != null) {
+			try {
+				jarFileUrl = jarFile.getAbsoluteFile().toURI().toURL();
+			} catch (MalformedURLException e1) {
+				throw new IllegalArgumentException("The jar file path is invalid.");
+			}
+
+			checkJarFile(jarFileUrl);
+		} else if (!isPython) {
 			throw new IllegalArgumentException("The jar file must not be null.");
 		}
-
-		URL jarFileUrl;
-		try {
-			jarFileUrl = jarFile.getAbsoluteFile().toURI().toURL();
-		} catch (MalformedURLException e1) {
-			throw new IllegalArgumentException("The jar file path is invalid.");
-		}
-
-		checkJarFile(jarFileUrl);
 
 		this.jarFile = jarFileUrl;
 		this.args = args == null ? new String[0] : args;
@@ -189,7 +207,7 @@ public class PackagedProgram {
 		}
 
 		// now that we have an entry point, we can extract the nested jar files (if any)
-		this.extractedTempLibraries = extractContainedLibraries(jarFileUrl);
+		this.extractedTempLibraries = jarFileUrl == null ? Collections.emptyList() : extractContainedLibraries(jarFileUrl);
 		this.classpaths = classpaths;
 		this.userCodeClassLoader = JobWithJars.buildUserCodeClassLoader(getAllLibraries(), classpaths, getClass().getClassLoader());
 
@@ -221,7 +239,7 @@ public class PackagedProgram {
 		}
 	}
 
-	PackagedProgram(Class<?> entryPointClass, String... args) throws ProgramInvocationException {
+	public PackagedProgram(Class<?> entryPointClass, String... args) throws ProgramInvocationException {
 		this.jarFile = null;
 		this.args = args == null ? new String[0] : args;
 
@@ -231,6 +249,7 @@ public class PackagedProgram {
 
 		// load the entry point class
 		this.mainClass = entryPointClass;
+		isPython = entryPointClass.getCanonicalName().equals("org.apache.flink.client.python.PythonDriver");
 
 		// if the entry point is a program, instantiate the class and get the plan
 		if (Program.class.isAssignableFrom(this.mainClass)) {
@@ -292,7 +311,7 @@ public class PackagedProgram {
 			return new JobWithJars(getPlan(), Collections.<URL>emptyList(), classpaths, userCodeClassLoader);
 		} else {
 			throw new ProgramInvocationException("Cannot create a " + JobWithJars.class.getSimpleName() +
-				" for a program that is using the interactive mode.");
+				" for a program that is using the interactive mode.", getPlan().getJobId());
 		}
 	}
 
@@ -307,7 +326,7 @@ public class PackagedProgram {
 			return new JobWithJars(getPlan(), getAllLibraries(), classpaths, userCodeClassLoader);
 		} else {
 			throw new ProgramInvocationException("Cannot create a " + JobWithJars.class.getSimpleName() +
-					" for a program that is using the interactive mode.");
+					" for a program that is using the interactive mode.", getPlan().getJobId());
 		}
 	}
 
@@ -339,12 +358,12 @@ public class PackagedProgram {
 			}
 			catch (Throwable t) {
 				// the invocation gets aborted with the preview plan
-				if (env.previewPlan != null) {
-					previewPlan = env.previewPlan;
-				} else if (env.preview != null) {
-					return env.preview;
-				} else {
-					throw new ProgramInvocationException("The program caused an error: ", t);
+				if (env.previewPlan == null) {
+					if (env.preview != null) {
+						return env.preview;
+					} else {
+						throw new ProgramInvocationException("The program caused an error: ", getPlan().getJobId(), t);
+					}
 				}
 			}
 			finally {
@@ -355,7 +374,8 @@ public class PackagedProgram {
 				previewPlan =  env.previewPlan;
 			} else {
 				throw new ProgramInvocationException(
-						"The program plan could not be fetched. The program silently swallowed the control flow exceptions.");
+					"The program plan could not be fetched. The program silently swallowed the control flow exceptions.",
+					getPlan().getJobId());
 			}
 		}
 		else {
@@ -380,6 +400,7 @@ public class PackagedProgram {
 	 *         This invocation is thrown if the Program can't be properly loaded. Causes
 	 *         may be a missing / wrong class or manifest files.
 	 */
+	@Nullable
 	public String getDescription() throws ProgramInvocationException {
 		if (ProgramDescription.class.isAssignableFrom(this.mainClass)) {
 
@@ -452,6 +473,36 @@ public class PackagedProgram {
 				libs.add(tmpLib.getAbsoluteFile().toURI().toURL());
 			}
 			catch (MalformedURLException e) {
+				throw new RuntimeException("URL is invalid. This should not happen.", e);
+			}
+		}
+
+		if (isPython) {
+			String flinkOptPath = System.getenv(ConfigConstants.ENV_FLINK_OPT_DIR);
+			final List<Path> pythonJarPath = new ArrayList<>();
+			try {
+				Files.walkFileTree(FileSystems.getDefault().getPath(flinkOptPath), new SimpleFileVisitor<Path>() {
+					@Override
+					public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+						FileVisitResult result = super.visitFile(file, attrs);
+						if (file.getFileName().toString().startsWith("flink-python")) {
+							pythonJarPath.add(file);
+						}
+						return result;
+					}
+				});
+			} catch (IOException e) {
+				throw new RuntimeException(
+					"Exception encountered during finding the flink-python jar. This should not happen.", e);
+			}
+
+			if (pythonJarPath.size() != 1) {
+				throw new RuntimeException("Found " + pythonJarPath.size() + " flink-python jar.");
+			}
+
+			try {
+				libs.add(pythonJarPath.get(0).toUri().toURL());
+			} catch (MalformedURLException e) {
 				throw new RuntimeException("URL is invalid. This should not happen.", e);
 			}
 		}
@@ -539,7 +590,7 @@ public class PackagedProgram {
 			} else if (exceptionInMethod instanceof ProgramInvocationException) {
 				throw (ProgramInvocationException) exceptionInMethod;
 			} else {
-				throw new ProgramInvocationException("The main method caused an error.", exceptionInMethod);
+				throw new ProgramInvocationException("The main method caused an error: " + exceptionInMethod.getMessage(), exceptionInMethod);
 			}
 		}
 		catch (Throwable t) {
@@ -692,7 +743,9 @@ public class PackagedProgram {
 					for (int i = 0; i < containedJarFileEntries.size(); i++) {
 						final JarEntry entry = containedJarFileEntries.get(i);
 						String name = entry.getName();
-						name = name.replace(File.separatorChar, '_');
+						// '/' as in case of zip, jar
+						// java.util.zip.ZipEntry#isDirectory always looks only for '/' not for File.separator
+						name = name.replace('/', '_');
 
 						File tempFile;
 						try {
@@ -768,7 +821,7 @@ public class PackagedProgram {
 			JobWithJars.checkJarFile(jarfile);
 		}
 		catch (IOException e) {
-			throw new ProgramInvocationException(e.getMessage());
+			throw new ProgramInvocationException(e.getMessage(), e);
 		}
 		catch (Throwable t) {
 			throw new ProgramInvocationException("Cannot access jar file" + (t.getMessage() == null ? "." : ": " + t.getMessage()), t);

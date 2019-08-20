@@ -18,9 +18,13 @@
 
 package org.apache.flink.runtime.io.network.partition.consumer;
 
-import io.netty.buffer.ByteBuf;
 import org.apache.flink.util.AbstractID;
 
+import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
+
+/**
+ * Identifier for input channels.
+ */
 public class InputChannelID extends AbstractID {
 
 	private static final long serialVersionUID = 1L;

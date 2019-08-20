@@ -24,6 +24,7 @@ import org.apache.flink.api.java.io.jdbc.JDBCInputFormat.JDBCInputFormatBuilder;
 import org.apache.flink.api.java.io.jdbc.split.NumericBetweenParametersProvider;
 import org.apache.flink.types.Row;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -31,7 +32,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.sql.Types;
+
+import static org.hamcrest.core.StringContains.containsString;
 
 /**
  * Tests using both {@link JDBCInputFormat} and {@link JDBCOutputFormat}.
@@ -46,6 +50,24 @@ public class JDBCFullTest extends JDBCTestBase {
 	@Test
 	public void testWithParallelism() throws Exception {
 		runTest(true);
+	}
+
+	@Test
+	public void testEnrichedClassCastException() throws Exception {
+		exception.expect(ClassCastException.class);
+		exception.expectMessage(containsString("field index: 3, field value: 11.11."));
+
+		JDBCOutputFormat jdbcOutputFormat = JDBCOutputFormat.buildJDBCOutputFormat()
+			.setDrivername(JDBCTestBase.DRIVER_CLASS)
+			.setDBUrl(JDBCTestBase.DB_URL)
+			.setQuery("insert into newbooks (id, title, author, price, qty) values (?,?,?,?,?)")
+			.setSqlTypes(new int[]{Types.INTEGER, Types.VARCHAR, Types.VARCHAR, Types.DOUBLE, Types.INTEGER})
+			.finish();
+
+		jdbcOutputFormat.open(1, 1);
+		Row inputRow = Row.of(1001, "Java public for dummies", "Tan Ah Teck", "11.11", 11);
+		jdbcOutputFormat.writeRecord(inputRow);
+		jdbcOutputFormat.close();
 	}
 
 	private void runTest(boolean exploitParallelism) throws Exception {
@@ -63,7 +85,7 @@ public class JDBCFullTest extends JDBCTestBase {
 			//use a "splittable" query to exploit parallelism
 			inputBuilder = inputBuilder
 					.setQuery(JDBCTestBase.SELECT_ALL_BOOKS_SPLIT_BY_ID)
-					.setParametersProvider(new NumericBetweenParametersProvider(fetchSize, min, max));
+					.setParametersProvider(new NumericBetweenParametersProvider(min, max).ofBatchSize(fetchSize));
 		}
 		DataSet<Row> source = environment.createInput(inputBuilder.finish());
 
@@ -89,6 +111,19 @@ public class JDBCFullTest extends JDBCTestBase {
 				count++;
 			}
 			Assert.assertEquals(JDBCTestBase.TEST_DATA.length, count);
+		}
+	}
+
+	@After
+	public void clearOutputTable() throws Exception {
+		Class.forName(DRIVER_CLASS);
+		try (
+			Connection conn = DriverManager.getConnection(DB_URL);
+			Statement stat = conn.createStatement()) {
+			stat.execute("DELETE FROM " + OUTPUT_TABLE);
+
+			stat.close();
+			conn.close();
 		}
 	}
 

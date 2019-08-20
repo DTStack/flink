@@ -18,8 +18,6 @@
 
 package org.apache.flink.api.java;
 
-import org.apache.commons.lang3.StringUtils;
-
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.accumulators.Accumulator;
 import org.apache.flink.api.common.accumulators.SerializedListAccumulator;
@@ -31,19 +29,22 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.typeutils.GenericTypeInfo;
 import org.apache.flink.configuration.Configuration;
 
+import org.apache.commons.lang3.StringUtils;
+
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.Optional;
 import java.util.Random;
-
-import static org.apache.flink.api.java.functions.FunctionAnnotation.SkipCodeAnalysis;
 
 /**
  * Utility class that contains helper methods to work with Java APIs.
  */
 @Internal
 public final class Utils {
-	
+
 	public static final Random RNG = new Random();
 
 	public static String getCallLocationName() {
@@ -53,7 +54,7 @@ public final class Utils {
 	public static String getCallLocationName(int depth) {
 		StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
 
-		if (stackTrace.length < depth) {
+		if (stackTrace.length <= depth) {
 			return "<unknown>";
 		}
 
@@ -63,15 +64,14 @@ public final class Utils {
 	}
 
 	// --------------------------------------------------------------------------------------------
-	
+
 	/**
 	 * Utility sink function that counts elements and writes the count into an accumulator,
 	 * from which it can be retrieved by the client. This sink is used by the
 	 * {@link DataSet#count()} function.
-	 * 
+	 *
 	 * @param <T> Type of elements to count.
 	 */
-	@SkipCodeAnalysis
 	public static class CountHelper<T> extends RichOutputFormat<T> {
 
 		private static final long serialVersionUID = 1L;
@@ -108,14 +108,13 @@ public final class Utils {
 	 *
 	 * @param <T> Type of elements to count.
 	 */
-	@SkipCodeAnalysis
 	public static class CollectHelper<T> extends RichOutputFormat<T> {
 
 		private static final long serialVersionUID = 1L;
 
 		private final String id;
 		private final TypeSerializer<T> serializer;
-		
+
 		private SerializedListAccumulator<T> accumulator;
 
 		public CollectHelper(String id, TypeSerializer<T> serializer) {
@@ -143,6 +142,9 @@ public final class Utils {
 		}
 	}
 
+	/**
+	 * Accumulator of {@link ChecksumHashCode}.
+	 */
 	public static class ChecksumHashCode implements SimpleAccumulator<ChecksumHashCode> {
 
 		private static final long serialVersionUID = 1L;
@@ -213,7 +215,10 @@ public final class Utils {
 		}
 	}
 
-	@SkipCodeAnalysis
+	/**
+	 * {@link RichOutputFormat} for {@link ChecksumHashCode}.
+	 * @param <T>
+	 */
 	public static class ChecksumHashCodeHelper<T> extends RichOutputFormat<T> {
 
 		private static final long serialVersionUID = 1L;
@@ -248,7 +253,6 @@ public final class Utils {
 		}
 	}
 
-
 	// --------------------------------------------------------------------------------------------
 
 	/**
@@ -262,19 +266,19 @@ public final class Utils {
 	private static <T> String getSerializerTree(TypeInformation<T> ti, int indent) {
 		String ret = "";
 		if (ti instanceof CompositeType) {
-			ret += StringUtils.repeat(' ', indent) + ti.getClass().getSimpleName()+"\n";
+			ret += StringUtils.repeat(' ', indent) + ti.getClass().getSimpleName() + "\n";
 			CompositeType<T> cti = (CompositeType<T>) ti;
 			String[] fieldNames = cti.getFieldNames();
 			for (int i = 0; i < cti.getArity(); i++) {
 				TypeInformation<?> fieldType = cti.getTypeAt(i);
-				ret += StringUtils.repeat(' ', indent + 2) + fieldNames[i]+":"+getSerializerTree(fieldType, indent);
+				ret += StringUtils.repeat(' ', indent + 2) + fieldNames[i] + ":" + getSerializerTree(fieldType, indent);
 			}
 		} else {
 			if (ti instanceof GenericTypeInfo) {
-				ret += StringUtils.repeat(' ', indent) + "GenericTypeInfo ("+ti.getTypeClass().getSimpleName()+")\n";
+				ret += StringUtils.repeat(' ', indent) + "GenericTypeInfo (" + ti.getTypeClass().getSimpleName() + ")\n";
 				ret += getGenericTypeTree(ti.getTypeClass(), indent + 4);
 			} else {
-				ret += StringUtils.repeat(' ', indent) + ti.toString()+"\n";
+				ret += StringUtils.repeat(' ', indent) + ti.toString() + "\n";
 			}
 		}
 		return ret;
@@ -286,13 +290,31 @@ public final class Utils {
 			if (Modifier.isStatic(field.getModifiers()) || Modifier.isTransient(field.getModifiers())) {
 				continue;
 			}
-			ret += StringUtils.repeat(' ', indent) + field.getName() + ":" + field.getType().getName() + 
+			ret += StringUtils.repeat(' ', indent) + field.getName() + ":" + field.getType().getName() +
 				(field.getType().isEnum() ? " (is enum)" : "") + "\n";
 			if (!field.getType().isPrimitive()) {
 				ret += getGenericTypeTree(field.getType(), indent + 4);
 			}
 		}
 		return ret;
+	}
+
+	// --------------------------------------------------------------------------------------------
+
+	/**
+	 * Resolves the given factories. The thread local factory has preference over the static factory.
+	 * If none is set, the method returns {@link Optional#empty()}.
+	 *
+	 * @param threadLocalFactory containing the thread local factory
+	 * @param staticFactory containing the global factory
+	 * @param <T> type of factory
+	 * @return Optional containing the resolved factory if it exists, otherwise it's empty
+	 */
+	public static <T> Optional<T> resolveFactory(ThreadLocal<T> threadLocalFactory, @Nullable T staticFactory) {
+		final T localFactory = threadLocalFactory.get();
+		final T factory = localFactory == null ? staticFactory : localFactory;
+
+		return Optional.ofNullable(factory);
 	}
 
 	/**

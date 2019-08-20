@@ -29,28 +29,31 @@ package org.apache.flink.runtime.webmonitor;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.util.ExceptionUtils;
 
-import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.DefaultFullHttpResponse;
-import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http.HttpObject;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.codec.http.LastHttpContent;
-import io.netty.handler.codec.http.QueryStringDecoder;
-import io.netty.handler.codec.http.QueryStringEncoder;
-import io.netty.handler.codec.http.multipart.DefaultHttpDataFactory;
-import io.netty.handler.codec.http.multipart.DiskFileUpload;
-import io.netty.handler.codec.http.multipart.HttpDataFactory;
-import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
-import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder.EndOfDataDecoderException;
-import io.netty.handler.codec.http.multipart.InterfaceHttpData;
-import io.netty.handler.codec.http.multipart.InterfaceHttpData.HttpDataType;
+import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
+import org.apache.flink.shaded.netty4.io.netty.channel.ChannelHandler;
+import org.apache.flink.shaded.netty4.io.netty.channel.ChannelHandlerContext;
+import org.apache.flink.shaded.netty4.io.netty.channel.SimpleChannelInboundHandler;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultFullHttpResponse;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpContent;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpHeaders;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpMethod;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpObject;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpRequest;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVersion;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.LastHttpContent;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.QueryStringDecoder;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.QueryStringEncoder;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.multipart.DefaultHttpDataFactory;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.multipart.DiskFileUpload;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.multipart.HttpDataFactory;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.multipart.HttpPostRequestDecoder.EndOfDataDecoderException;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.multipart.InterfaceHttpData;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.multipart.InterfaceHttpData.HttpDataType;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -65,6 +68,8 @@ import java.util.UUID;
  */
 @ChannelHandler.Sharable
 public class HttpRequestHandler extends SimpleChannelInboundHandler<HttpObject> {
+
+	private static final Logger LOG = LoggerFactory.getLogger(HttpRequestHandler.class);
 
 	private static final Charset ENCODING = ConfigConstants.DEFAULT_CHARSET;
 
@@ -133,6 +138,10 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<HttpObject> 
 								String name = file.getFilename();
 
 								File target = new File(tmpDir, UUID.randomUUID() + "_" + name);
+								if (!tmpDir.exists()) {
+									logExternalUploadDirDeletion(tmpDir);
+									checkAndCreateUploadDir(tmpDir);
+								}
 								file.renameTo(target);
 
 								QueryStringEncoder encoder = new QueryStringEncoder(currentRequestPath);
@@ -142,8 +151,6 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<HttpObject> 
 								currentRequest.setUri(encoder.toString());
 							}
 						}
-
-						data.release();
 					}
 				}
 				catch (EndOfDataDecoderException ignored) {}
@@ -182,6 +189,30 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<HttpObject> 
 
 				ctx.writeAndFlush(response);
 			}
+		}
+	}
+
+	public static void logExternalUploadDirDeletion(File uploadDir) {
+		LOG.warn("Jar storage directory {} has been deleted externally. Previously uploaded jars are no longer available.", uploadDir.getAbsolutePath());
+	}
+
+	/**
+	 * Checks whether the given directory exists and is writable. If it doesn't exist this method will attempt to create
+	 * it.
+	 *
+	 * @param uploadDir directory to check
+	 * @throws IOException if the directory does not exist and cannot be created, or if the directory isn't writable
+	 */
+	public static synchronized void checkAndCreateUploadDir(File uploadDir) throws IOException {
+		if (uploadDir.exists() && uploadDir.canWrite()) {
+			LOG.info("Using directory {} for web frontend JAR file uploads.", uploadDir);
+		} else if (uploadDir.mkdirs() && uploadDir.canWrite()) {
+			LOG.info("Created directory {} for web frontend JAR file uploads.", uploadDir);
+		} else {
+			LOG.warn("Jar upload directory {} cannot be created or is not writable.", uploadDir.getAbsolutePath());
+			throw new IOException(
+				String.format("Jar upload directory %s cannot be created or is not writable.",
+					uploadDir.getAbsolutePath()));
 		}
 	}
 }

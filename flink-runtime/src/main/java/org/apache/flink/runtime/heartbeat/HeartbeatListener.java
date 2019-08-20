@@ -19,7 +19,6 @@
 package org.apache.flink.runtime.heartbeat;
 
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
-import org.apache.flink.runtime.concurrent.Future;
 
 /**
  * Interface for the interaction with the {@link HeartbeatManager}. The heartbeat listener is used
@@ -53,10 +52,10 @@ public interface HeartbeatListener<I, O> {
 	void reportPayload(ResourceID resourceID, I payload);
 
 	/**
-	 * Retrieves the payload value for the next heartbeat message. Since the operation can happen
-	 * asynchronously, the result is returned wrapped in a future.
+	 * Retrieves the payload value for the next heartbeat message.
 	 *
-	 * @return Future containing the next payload for heartbeats
+	 * @param resourceID Resource ID identifying the receiver of the payload
+	 * @return The payload for the next heartbeat
 	 */
-	Future<O> retrievePayload();
+	O retrievePayload(ResourceID resourceID);
 }

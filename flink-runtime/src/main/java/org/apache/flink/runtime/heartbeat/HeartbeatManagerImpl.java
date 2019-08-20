@@ -19,9 +19,6 @@
 package org.apache.flink.runtime.heartbeat;
 
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
-import org.apache.flink.runtime.concurrent.AcceptFunction;
-import org.apache.flink.runtime.concurrent.ApplyFunction;
-import org.apache.flink.runtime.concurrent.Future;
 import org.apache.flink.runtime.concurrent.ScheduledExecutor;
 import org.apache.flink.util.Preconditions;
 
@@ -31,7 +28,6 @@ import javax.annotation.concurrent.ThreadSafe;
 
 import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -59,15 +55,12 @@ public class HeartbeatManagerImpl<I, O> implements HeartbeatManager<I, O> {
 	private final HeartbeatListener<I, O> heartbeatListener;
 
 	/** Executor service used to run heartbeat timeout notifications. */
-	private final ScheduledExecutor scheduledExecutor;
+	private final ScheduledExecutor mainThreadExecutor;
 
 	protected final Logger log;
 
 	/** Map containing the heartbeat monitors associated with the respective resource ID. */
 	private final ConcurrentHashMap<ResourceID, HeartbeatManagerImpl.HeartbeatMonitor<O>> heartbeatTargets;
-
-	/** Execution context used to run future callbacks. */
-	private final Executor executor;
 
 	/** Running state of the heartbeat manager. */
 	protected volatile boolean stopped;
@@ -76,17 +69,15 @@ public class HeartbeatManagerImpl<I, O> implements HeartbeatManager<I, O> {
 			long heartbeatTimeoutIntervalMs,
 			ResourceID ownResourceID,
 			HeartbeatListener<I, O> heartbeatListener,
-			Executor executor,
-			ScheduledExecutor scheduledExecutor,
+			ScheduledExecutor mainThreadExecutor,
 			Logger log) {
 		Preconditions.checkArgument(heartbeatTimeoutIntervalMs > 0L, "The heartbeat timeout has to be larger than 0.");
 
 		this.heartbeatTimeoutIntervalMs = heartbeatTimeoutIntervalMs;
 		this.ownResourceID = Preconditions.checkNotNull(ownResourceID);
 		this.heartbeatListener = Preconditions.checkNotNull(heartbeatListener, "heartbeatListener");
-		this.scheduledExecutor = Preconditions.checkNotNull(scheduledExecutor);
+		this.mainThreadExecutor = Preconditions.checkNotNull(mainThreadExecutor);
 		this.log = Preconditions.checkNotNull(log);
-		this.executor = Preconditions.checkNotNull(executor);
 		this.heartbeatTargets = new ConcurrentHashMap<>(16);
 
 		stopped = false;
@@ -100,15 +91,11 @@ public class HeartbeatManagerImpl<I, O> implements HeartbeatManager<I, O> {
 		return ownResourceID;
 	}
 
-	Executor getExecutor() {
-		return executor;
-	}
-
 	HeartbeatListener<I, O> getHeartbeatListener() {
 		return heartbeatListener;
 	}
 
-	Collection<HeartbeatManagerImpl.HeartbeatMonitor<O>> getHeartbeatTargets() {
+	Collection<HeartbeatMonitor<O>> getHeartbeatTargets() {
 		return heartbeatTargets.values();
 	}
 
@@ -120,12 +107,12 @@ public class HeartbeatManagerImpl<I, O> implements HeartbeatManager<I, O> {
 	public void monitorTarget(ResourceID resourceID, HeartbeatTarget<O> heartbeatTarget) {
 		if (!stopped) {
 			if (heartbeatTargets.containsKey(resourceID)) {
-				log.info("The target with resource ID {} is already been monitored.", resourceID);
+				log.debug("The target with resource ID {} is already been monitored.", resourceID);
 			} else {
 				HeartbeatManagerImpl.HeartbeatMonitor<O> heartbeatMonitor = new HeartbeatManagerImpl.HeartbeatMonitor<>(
 					resourceID,
 					heartbeatTarget,
-					scheduledExecutor,
+					mainThreadExecutor,
 					heartbeatListener,
 					heartbeatTimeoutIntervalMs);
 
@@ -165,6 +152,21 @@ public class HeartbeatManagerImpl<I, O> implements HeartbeatManager<I, O> {
 		heartbeatTargets.clear();
 	}
 
+	@Override
+	public long getLastHeartbeatFrom(ResourceID resourceId) {
+		HeartbeatMonitor<O> heartbeatMonitor = heartbeatTargets.get(resourceId);
+
+		if (heartbeatMonitor != null) {
+			return heartbeatMonitor.getLastHeartbeat();
+		} else {
+			return -1L;
+		}
+	}
+
+	ScheduledExecutor getMainThreadExecutor() {
+		return mainThreadExecutor;
+	}
+
 	//----------------------------------------------------------------------------------------------
 	// HeartbeatTarget methods
 	//----------------------------------------------------------------------------------------------
@@ -193,27 +195,7 @@ public class HeartbeatManagerImpl<I, O> implements HeartbeatManager<I, O> {
 					heartbeatListener.reportPayload(requestOrigin, heartbeatPayload);
 				}
 
-				Future<O> futurePayload = heartbeatListener.retrievePayload();
-
-				if (futurePayload != null) {
-					Future<Void> sendHeartbeatFuture = futurePayload.thenAcceptAsync(new AcceptFunction<O>() {
-						@Override
-						public void accept(O retrievedPayload) {
-							heartbeatTarget.receiveHeartbeat(getOwnResourceID(), retrievedPayload);
-						}
-					}, executor);
-
-					sendHeartbeatFuture.exceptionally(new ApplyFunction<Throwable, Void>() {
-						@Override
-						public Void apply(Throwable failure) {
-							log.warn("Could not send heartbeat to target with id {}.", requestOrigin, failure);
-
-							return null;
-						}
-					});
-				} else {
-					heartbeatTarget.receiveHeartbeat(ownResourceID, null);
-				}
+				heartbeatTarget.receiveHeartbeat(getOwnResourceID(), heartbeatListener.retrievePayload(requestOrigin));
 			}
 		}
 	}
@@ -260,6 +242,8 @@ public class HeartbeatManagerImpl<I, O> implements HeartbeatManager<I, O> {
 
 		private final AtomicReference<State> state = new AtomicReference<>(State.RUNNING);
 
+		private volatile long lastHeartbeat;
+
 		HeartbeatMonitor(
 			ResourceID resourceID,
 			HeartbeatTarget<O> heartbeatTarget,
@@ -272,8 +256,10 @@ public class HeartbeatManagerImpl<I, O> implements HeartbeatManager<I, O> {
 			this.scheduledExecutor = Preconditions.checkNotNull(scheduledExecutor);
 			this.heartbeatListener = Preconditions.checkNotNull(heartbeatListener);
 
-			Preconditions.checkArgument(heartbeatTimeoutIntervalMs >= 0L, "The heartbeat timeout interval has to be larger than 0.");
+			Preconditions.checkArgument(heartbeatTimeoutIntervalMs > 0L, "The heartbeat timeout interval has to be larger than 0.");
 			this.heartbeatTimeoutIntervalMs = heartbeatTimeoutIntervalMs;
+
+			lastHeartbeat = 0L;
 
 			resetHeartbeatTimeout(heartbeatTimeoutIntervalMs);
 		}
@@ -282,7 +268,16 @@ public class HeartbeatManagerImpl<I, O> implements HeartbeatManager<I, O> {
 			return heartbeatTarget;
 		}
 
+		ResourceID getHeartbeatTargetId() {
+			return resourceID;
+		}
+
+		public long getLastHeartbeat() {
+			return lastHeartbeat;
+		}
+
 		void reportHeartbeat() {
+			lastHeartbeat = System.currentTimeMillis();
 			resetHeartbeatTimeout(heartbeatTimeoutIntervalMs);
 		}
 

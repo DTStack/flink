@@ -18,16 +18,20 @@
 package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.operators.util.CorruptConfigurationException;
-import org.apache.flink.runtime.state.AbstractStateBackend;
+import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.util.ClassLoaderUtil;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.collector.selector.OutputSelector;
+import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperator;
+import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.runtime.tasks.StreamTaskException;
 import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.OutputTag;
@@ -64,7 +68,6 @@ public class StreamConfig implements Serializable {
 	private static final String ITERATION_ID = "iterationId";
 	private static final String OUTPUT_SELECTOR_WRAPPER = "outputSelectorWrapper";
 	private static final String SERIALIZEDUDF = "serializedUDF";
-	private static final String USER_FUNCTION = "userFunction";
 	private static final String BUFFER_TIMEOUT = "bufferTimeout";
 	private static final String TYPE_SERIALIZER_IN_1 = "typeSerializer_in_1";
 	private static final String TYPE_SERIALIZER_IN_2 = "typeSerializer_in_2";
@@ -76,6 +79,7 @@ public class StreamConfig implements Serializable {
 	private static final String OUT_STREAM_EDGES = "outStreamEdges";
 	private static final String IN_STREAM_EDGES = "inStreamEdges";
 	private static final String OPERATOR_NAME = "operatorName";
+	private static final String OPERATOR_ID = "operatorID";
 	private static final String CHAIN_END = "chainEnd";
 
 	private static final String CHECKPOINTING_ENABLED = "checkpointing";
@@ -200,20 +204,33 @@ public class StreamConfig implements Serializable {
 		return config.getLong(BUFFER_TIMEOUT, DEFAULT_TIMEOUT);
 	}
 
-	public void setStreamOperator(StreamOperator<?> operator) {
-		if (operator != null) {
-			config.setClass(USER_FUNCTION, operator.getClass());
+	public boolean isFlushAlwaysEnabled() {
+		return getBufferTimeout() == 0;
+	}
 
+	@VisibleForTesting
+	public void setStreamOperator(StreamOperator<?> operator) {
+		setStreamOperatorFactory(SimpleOperatorFactory.of(operator));
+	}
+
+	public void setStreamOperatorFactory(StreamOperatorFactory<?> factory) {
+		if (factory != null) {
 			try {
-				InstantiationUtil.writeObjectToConfig(operator, this.config, SERIALIZEDUDF);
+				InstantiationUtil.writeObjectToConfig(factory, this.config, SERIALIZEDUDF);
 			} catch (IOException e) {
 				throw new StreamTaskException("Cannot serialize operator object "
-						+ operator.getClass() + ".", e);
+						+ factory.getClass() + ".", e);
 			}
 		}
 	}
 
-	public <T> T getStreamOperator(ClassLoader cl) {
+	@VisibleForTesting
+	public <T extends StreamOperator<?>> T getStreamOperator(ClassLoader cl) {
+		SimpleOperatorFactory<?> factory = getStreamOperatorFactory(cl);
+		return (T) factory.getOperator();
+	}
+
+	public <T extends StreamOperatorFactory<?>> T getStreamOperatorFactory(ClassLoader cl) {
 		try {
 			return InstantiationUtil.readObjectFromConfig(this.config, SERIALIZEDUDF, cl);
 		}
@@ -227,7 +244,7 @@ public class StreamConfig implements Serializable {
 							"\nClass was actually found in classloader - deserialization issue." :
 							"\nClass not resolvable through given classloader.");
 
-			throw new StreamTaskException(exceptionMessage);
+			throw new StreamTaskException(exceptionMessage, e);
 		}
 		catch (Exception e) {
 			throw new StreamTaskException("Cannot instantiate user function.", e);
@@ -411,6 +428,22 @@ public class StreamConfig implements Serializable {
 		}
 	}
 
+	public Map<Integer, StreamConfig> getTransitiveChainedTaskConfigsWithSelf(ClassLoader cl) {
+		//TODO: could this logic be moved to the user of #setTransitiveChainedTaskConfigs() ?
+		Map<Integer, StreamConfig> chainedTaskConfigs = getTransitiveChainedTaskConfigs(cl);
+		chainedTaskConfigs.put(getVertexID(), this);
+		return chainedTaskConfigs;
+	}
+
+	public void setOperatorID(OperatorID operatorID) {
+		this.config.setBytes(OPERATOR_ID, operatorID.getBytes());
+	}
+
+	public OperatorID getOperatorID() {
+		byte[] operatorIDBytes = config.getBytes(OPERATOR_ID, null);
+		return new OperatorID(Preconditions.checkNotNull(operatorIDBytes));
+	}
+
 	public void setOperatorName(String name) {
 		this.config.setString(OPERATOR_NAME, name);
 	}
@@ -431,7 +464,7 @@ public class StreamConfig implements Serializable {
 	//  State backend
 	// ------------------------------------------------------------------------
 
-	public void setStateBackend(AbstractStateBackend backend) {
+	public void setStateBackend(StateBackend backend) {
 		if (backend != null) {
 			try {
 				InstantiationUtil.writeObjectToConfig(backend, this.config, STATE_BACKEND);
@@ -441,7 +474,7 @@ public class StreamConfig implements Serializable {
 		}
 	}
 
-	public AbstractStateBackend getStateBackend(ClassLoader cl) {
+	public StateBackend getStateBackend(ClassLoader cl) {
 		try {
 			return InstantiationUtil.readObjectFromConfig(this.config, STATE_BACKEND, cl);
 		} catch (Exception e) {
@@ -488,7 +521,7 @@ public class StreamConfig implements Serializable {
 
 
 	// ------------------------------------------------------------------------
-	//  Miscellansous
+	//  Miscellaneous
 	// ------------------------------------------------------------------------
 
 	public void setChainStart() {
@@ -528,7 +561,7 @@ public class StreamConfig implements Serializable {
 		builder.append("\nChained subtasks: ").append(getChainedOutputs(cl));
 
 		try {
-			builder.append("\nOperator: ").append(getStreamOperator(cl).getClass().getSimpleName());
+			builder.append("\nOperator: ").append(getStreamOperatorFactory(cl).getClass().getSimpleName());
 		}
 		catch (Exception e) {
 			builder.append("\nOperator: Missing");

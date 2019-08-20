@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.operators.hash;
 
-import com.google.common.collect.Ordering;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.functions.util.CopyingListCollector;
 import org.apache.flink.api.common.typeutils.SameTypePairComparator;
@@ -37,13 +36,15 @@ import org.apache.flink.runtime.operators.testutils.UniformStringPairGenerator;
 import org.apache.flink.runtime.operators.testutils.types.*;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.MutableObjectIterator;
+
+import org.apache.flink.shaded.guava18.com.google.common.collect.Ordering;
+
 import org.junit.Test;
 
 import java.io.EOFException;
 import java.util.*;
 
 import static org.junit.Assert.*;
-import static org.junit.Assert.fail;
 
 public class InPlaceMutableHashTableTest extends MutableHashTableTestBase {
 

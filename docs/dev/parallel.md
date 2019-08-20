@@ -27,7 +27,7 @@ program consists of multiple tasks (transformations/operators, data sources, and
 several parallel instances for execution and each parallel instance processes a subset of the task's
 input data. The number of parallel instances of a task is called its *parallelism*.
 
-If you want to use [savepoints]({{ site.baseurl }}/setup/savepoints.html) you should also consider
+If you want to use [savepoints]({{ site.baseurl }}/ops/state/savepoints.html) you should also consider
 setting a maximum parallelism (or `max parallelism`). When restoring from a savepoint you can
 change the parallelism of specific operators or the whole program and this setting specifies
 an upper bound on the parallelism. This is required because Flink internally partitions state
@@ -181,7 +181,7 @@ try {
 
 A system-wide default parallelism for all execution environments can be defined by setting the
 `parallelism.default` property in `./conf/flink-conf.yaml`. See the
-[Configuration]({{ site.baseurl }}/setup/config.html) documentation for details.
+[Configuration]({{ site.baseurl }}/ops/config.html) documentation for details.
 
 ## Setting the Maximum Parallelism
 
@@ -190,7 +190,7 @@ The maximum parallelism can be set in places where you can also set a parallelis
 `setMaxParallelism()` to set the maximum parallelism.
 
 The default setting for the maximum parallelism is roughly `operatorParallelism + (operatorParallelism / 2)` with
-a lower bound of `127` and an upper bound of `32768`.
+a lower bound of `128` and an upper bound of `32768`.
 
 <span class="label label-danger">Attention</span> Setting the maximum parallelism to a very large
 value can be detrimental to performance because some state backends have to keep internal data

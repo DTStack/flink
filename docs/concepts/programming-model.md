@@ -31,10 +31,10 @@ under the License.
 
 Flink offers different levels of abstraction to develop streaming/batch applications.
 
-<img src="../fig/levels_of_abstraction.svg" alt="Programming levels of abstraction" class="offset" width="80%" />
+<img src="{{ site.baseurl }}/fig/levels_of_abstraction.svg" alt="Programming levels of abstraction" class="offset" width="80%" />
 
   - The lowest level abstraction simply offers **stateful streaming**. It is embedded into the [DataStream API](../dev/datastream_api.html)
-    via the [Process Function](../dev/stream/process_function.html). It allows users freely process events from one or more streams,
+    via the [Process Function](../dev/stream/operators/process_function.html). It allows users freely process events from one or more streams,
     and use consistent fault tolerant *state*. In addition, users can register event time and processing time callbacks,
     allowing programs to realize sophisticated computations.
 
@@ -48,7 +48,7 @@ Flink offers different levels of abstraction to develop streaming/batch applicat
     for certain operations only. The *DataSet API* offers additional primitives on bounded data sets, like loops/iterations.
 
   - The **Table API** is a declarative DSL centered around *tables*, which may be dynamically changing tables (when representing streams).
-    The [Table API](../dev/table_api.html) follows the (extended) relational model: Tables have a schema attached (similar to tables in relational databases)
+    The [Table API](../dev/table/index.html) follows the (extended) relational model: Tables have a schema attached (similar to tables in relational databases)
     and the API offers comparable operations, such as select, project, join, group-by, aggregate, etc.
     Table API programs declaratively define *what logical operation should be done* rather than specifying exactly
    *how the code for the operation looks*. Though the Table API is extensible by various types of user-defined
@@ -60,7 +60,7 @@ Flink offers different levels of abstraction to develop streaming/batch applicat
 
   - The highest level abstraction offered by Flink is **SQL**. This abstraction is similar to the *Table API* both in semantics and
     expressiveness, but represents programs as SQL query expressions.
-    The [SQL](../dev/table_api.html#sql) abstraction closely interacts with the Table API, and SQL queries can be executed over tables defined in the *Table API*.
+    The [SQL](../dev/table/index.html#sql) abstraction closely interacts with the Table API, and SQL queries can be executed over tables defined in the *Table API*.
 
 
 ## Programs and Dataflows
@@ -76,13 +76,13 @@ Each dataflow starts with one or more **sources** and ends in one or more **sink
 arbitrary **directed acyclic graphs** *(DAGs)*. Although special forms of cycles are permitted via
 *iteration* constructs, for the most part we will gloss over this for simplicity.
 
-<img src="../fig/program_dataflow.svg" alt="A DataStream program, and its dataflow." class="offset" width="80%" />
+<img src="{{ site.baseurl }}/fig/program_dataflow.svg" alt="A DataStream program, and its dataflow." class="offset" width="80%" />
 
 Often there is a one-to-one correspondence between the transformations in the programs and the operators
 in the dataflow. Sometimes, however, one transformation may consist of multiple transformation operators.
 
 Sources and sinks are documented in the [streaming connectors](../dev/connectors/index.html) and [batch connectors](../dev/batch/connectors.html) docs.
-Transformations are documented in [DataStream transformations](../dev/datastream_api.html#datastream-transformations) and [DataSet transformations](../dev/batch/dataset_transformations.html).
+Transformations are documented in [DataStream operators]({{ site.baseurl }}/dev/stream/operators/index.html) and [DataSet transformations](../dev/batch/dataset_transformations.html).
 
 {% top %}
 
@@ -96,7 +96,7 @@ The number of operator subtasks is the **parallelism** of that particular operat
 is always that of its producing operator. Different operators of the same program may have different
 levels of parallelism.
 
-<img src="../fig/parallel_dataflow.svg" alt="A parallel dataflow" class="offset" width="80%" />
+<img src="{{ site.baseurl }}/fig/parallel_dataflow.svg" alt="A parallel dataflow" class="offset" width="80%" />
 
 Streams can transport data between two operators in a *one-to-one* (or *forwarding*) pattern, or in a *redistributing* pattern:
 
@@ -130,10 +130,10 @@ Windows can be *time driven* (example: every 30 seconds) or *data driven* (examp
 One typically distinguishes different types of windows, such as *tumbling windows* (no overlap),
 *sliding windows* (with overlap), and *session windows* (punctuated by a gap of inactivity).
 
-<img src="../fig/windows.svg" alt="Time- and Count Windows" class="offset" width="80%" />
+<img src="{{ site.baseurl }}/fig/windows.svg" alt="Time- and Count Windows" class="offset" width="80%" />
 
 More window examples can be found in this [blog post](https://flink.apache.org/news/2015/12/04/Introducing-windows.html).
-More details are in the [window docs](../dev/windows.html).
+More details are in the [window docs](../dev/stream/operators/windows.html).
 
 {% top %}
 
@@ -150,7 +150,7 @@ of time:
 
   - **Processing Time** is the local time at each operator that performs a time-based operation.
 
-<img src="../fig/event_ingestion_processing_time.svg" alt="Event Time, Ingestion Time, and Processing Time" class="offset" width="80%" />
+<img src="{{ site.baseurl }}/fig/event_ingestion_processing_time.svg" alt="Event Time, Ingestion Time, and Processing Time" class="offset" width="80%" />
 
 More details on how to handle time are in the [event time docs]({{ site.baseurl }}/dev/event_time.html).
 
@@ -169,9 +169,9 @@ and is restricted to the values associated with the current event's key. Alignin
 makes sure that all state updates are local operations, guaranteeing consistency without transaction overhead.
 This alignment also allows Flink to redistribute the state and adjust the stream partitioning transparently.
 
-<img src="../fig/state_partitioning.svg" alt="State and Partitioning" class="offset" width="50%" />
+<img src="{{ site.baseurl }}/fig/state_partitioning.svg" alt="State and Partitioning" class="offset" width="50%" />
 
-For more information, see the documentation on [working with state](../dev/stream/state.html).
+For more information, see the documentation on [state](../dev/stream/state/index.html).
 
 {% top %}
 
@@ -188,7 +188,7 @@ of events that need to be replayed).
 
 The description of the [fault tolerance internals]({{ site.baseurl }}/internals/stream_checkpointing.html) provides
 more information about how Flink manages checkpoints and related topics.
-Details about enabling and configuring checkpointing are in the [checkpointing API docs](../dev/stream/checkpointing.html).
+Details about enabling and configuring checkpointing are in the [checkpointing API docs](../dev/stream/state/checkpointing.html).
 
 
 {% top %}

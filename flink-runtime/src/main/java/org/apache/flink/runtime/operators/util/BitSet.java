@@ -32,7 +32,6 @@ public class BitSet {
 	// The BitSet bit size.
 	private int bitLength;
 
-	private final int BYTE_POSITION_MASK = 0xfffffff8;
 	private final int BYTE_INDEX_MASK = 0x00000007;
 
 	public BitSet(int byteSize) {
@@ -56,10 +55,9 @@ public class BitSet {
 	 * @param index - position
 	 */
 	public void set(int index) {
-		Preconditions.checkArgument(index < bitLength && index >= 0, 
-			String.format("Input Index[%d] is larger than BitSet available size[%d].", index, bitLength));
+		Preconditions.checkArgument(index < bitLength && index >= 0);
 
-		int byteIndex = (index & BYTE_POSITION_MASK) >>> 3;
+		int byteIndex = index >>> 3;
 		byte current = memorySegment.get(offset + byteIndex);
 		current |= (1 << (index & BYTE_INDEX_MASK));
 		memorySegment.put(offset + byteIndex, current);
@@ -72,10 +70,9 @@ public class BitSet {
 	 * @return - value at the bit position
 	 */
 	public boolean get(int index) {
-		Preconditions.checkArgument(index < bitLength && index >= 0,
-			String.format("Input Index[%d] is larger than BitSet available size[%d].", index, bitLength));
+		Preconditions.checkArgument(index < bitLength && index >= 0);
 		
-		int byteIndex = (index & BYTE_POSITION_MASK) >>> 3;
+		int byteIndex = index >>> 3;
 		byte current = memorySegment.get(offset + byteIndex);
 		return (current & (1 << (index & BYTE_INDEX_MASK))) != 0;
 	}
@@ -91,8 +88,14 @@ public class BitSet {
 	 * Clear the bit set.
 	 */
 	public void clear() {
-		for (int i = 0; i < byteLength; i++) {
-			memorySegment.put(offset + i, (byte) 0);
+		int index = 0;
+		while (index + 8 <= byteLength) {
+			memorySegment.putLong(offset + index, 0L);
+			index += 8;
+		}
+		while (index < byteLength) {
+			memorySegment.put(offset + index, (byte) 0);
+			index += 1;
 		}
 	}
 

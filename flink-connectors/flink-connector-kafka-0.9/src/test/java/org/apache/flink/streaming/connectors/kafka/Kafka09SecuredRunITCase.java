@@ -33,7 +33,7 @@ public class Kafka09SecuredRunITCase extends KafkaConsumerTestBase {
 	protected static final Logger LOG = LoggerFactory.getLogger(Kafka09SecuredRunITCase.class);
 
 	@BeforeClass
-	public static void prepare() throws ClassNotFoundException {
+	public static void prepare() throws Exception {
 		LOG.info("-------------------------------------------------------------------------");
 		LOG.info("    Starting Kafka09SecuredRunITCase ");
 		LOG.info("-------------------------------------------------------------------------");
@@ -41,11 +41,11 @@ public class Kafka09SecuredRunITCase extends KafkaConsumerTestBase {
 		SecureTestEnvironment.prepare(tempFolder);
 		SecureTestEnvironment.populateFlinkSecureConfigurations(getFlinkConfiguration());
 
-		startClusters(true);
+		startClusters(true, false);
 	}
 
 	@AfterClass
-	public static void shutDownServices() {
+	public static void shutDownServices() throws Exception {
 		shutdownClusters();
 		SecureTestEnvironment.cleanup();
 	}
@@ -54,7 +54,7 @@ public class Kafka09SecuredRunITCase extends KafkaConsumerTestBase {
 	//The timeout for the test case is 2 times timeout of ZK connection
 	@Test(timeout = 600000)
 	public void testMultipleTopics() throws Exception {
-		runProduceConsumeMultipleTopics();
+		runProduceConsumeMultipleTopics(true);
 	}
 
 }

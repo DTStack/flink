@@ -18,19 +18,20 @@
 
 package org.apache.flink.runtime.rpc.akka;
 
-import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.akka.AkkaUtils;
-
 import org.apache.flink.runtime.rpc.RpcEndpoint;
 import org.apache.flink.runtime.rpc.RpcGateway;
-import org.apache.flink.runtime.rpc.RpcMethod;
 import org.apache.flink.runtime.rpc.RpcService;
-
 import org.apache.flink.util.TestLogger;
+
 import org.junit.Test;
 
 import static org.junit.Assert.assertTrue;
 
+/**
+ * Tests that the {@link AkkaRpcService} runs all RPCs in the {@link AkkaRpcActor}'s
+ * main thread.
+ */
 public class MainThreadValidationTest extends TestLogger {
 
 	@Test
@@ -45,14 +46,14 @@ public class MainThreadValidationTest extends TestLogger {
 		// actual test
 		AkkaRpcService akkaRpcService = new AkkaRpcService(
 				AkkaUtils.createDefaultActorSystem(),
-				Time.milliseconds(10000));
+				AkkaRpcServiceConfiguration.defaultConfiguration());
 
 		try {
 			TestEndpoint testEndpoint = new TestEndpoint(akkaRpcService);
 			testEndpoint.start();
 
 			// this works, because it is executed as an RPC call
-			testEndpoint.getSelf().someConcurrencyCriticalFunction();
+			testEndpoint.getSelfGateway(TestGateway.class).someConcurrencyCriticalFunction();
 
 			// this fails, because it is executed directly
 			boolean exceptionThrown;
@@ -65,10 +66,10 @@ public class MainThreadValidationTest extends TestLogger {
 			}
 			assertTrue("should fail with an assertion error", exceptionThrown);
 
-			akkaRpcService.stopServer(testEndpoint.getSelf());
+			testEndpoint.closeAsync();
 		}
 		finally {
-			akkaRpcService.stopService();
+			akkaRpcService.stopService().get();
 		}
 	}
 
@@ -81,14 +82,13 @@ public class MainThreadValidationTest extends TestLogger {
 		void someConcurrencyCriticalFunction();
 	}
 
-	@SuppressWarnings("unused")
-	public static class TestEndpoint extends RpcEndpoint<TestGateway> {
+	private static class TestEndpoint extends RpcEndpoint implements TestGateway {
 
-		public TestEndpoint(RpcService rpcService) {
+		private TestEndpoint(RpcService rpcService) {
 			super(rpcService);
 		}
 
-		@RpcMethod
+		@Override
 		public void someConcurrencyCriticalFunction() {
 			validateRunsInMainThread();
 		}

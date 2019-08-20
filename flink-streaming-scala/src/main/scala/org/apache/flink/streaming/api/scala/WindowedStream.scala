@@ -30,7 +30,7 @@ import org.apache.flink.streaming.api.windowing.evictors.Evictor
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.triggers.Trigger
 import org.apache.flink.streaming.api.windowing.windows.Window
-import org.apache.flink.util.{Collector, OutputTag}
+import org.apache.flink.util.Collector
 
 /**
  * A [[WindowedStream]] represents a data stream where elements are grouped by
@@ -303,12 +303,10 @@ class WindowedStream[T, K, W <: Window](javaStream: JavaWStream[T, K, W]) {
     val applyFunction = new ScalaWindowFunctionWrapper[V, R, K, W](cleanedWindowFunction)
 
     val accumulatorType: TypeInformation[ACC] = implicitly[TypeInformation[ACC]]
-    val aggregationResultType: TypeInformation[V] = implicitly[TypeInformation[V]]
     val resultType: TypeInformation[R] = implicitly[TypeInformation[R]]
 
     asScalaStream(javaStream.aggregate(
-      cleanedPreAggregator, applyFunction,
-      accumulatorType, aggregationResultType, resultType))
+      cleanedPreAggregator, applyFunction, accumulatorType, resultType))
   }
 
   /**
@@ -333,12 +331,10 @@ class WindowedStream[T, K, W <: Window](javaStream: JavaWStream[T, K, W]) {
     val applyFunction = new ScalaWindowFunction[V, R, K, W](cleanedWindowFunction)
 
     val accumulatorType: TypeInformation[ACC] = implicitly[TypeInformation[ACC]]
-    val aggregationResultType: TypeInformation[V] = implicitly[TypeInformation[V]]
     val resultType: TypeInformation[R] = implicitly[TypeInformation[R]]
 
     asScalaStream(javaStream.aggregate(
-      cleanedPreAggregator, applyFunction,
-      accumulatorType, aggregationResultType, resultType))
+      cleanedPreAggregator, applyFunction, accumulatorType, resultType))
   }
 
   /**

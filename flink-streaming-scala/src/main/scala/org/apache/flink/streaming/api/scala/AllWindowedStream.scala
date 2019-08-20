@@ -30,7 +30,7 @@ import org.apache.flink.streaming.api.windowing.evictors.Evictor
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.triggers.Trigger
 import org.apache.flink.streaming.api.windowing.windows.Window
-import org.apache.flink.util.{Collector, OutputTag}
+import org.apache.flink.util.Collector
 import org.apache.flink.util.Preconditions.checkNotNull
 
 /**
@@ -318,12 +318,10 @@ class AllWindowedStream[T, W <: Window](javaStream: JavaAllWStream[T, W]) {
     val applyFunction = new ScalaAllWindowFunctionWrapper[V, R, W](cleanedWindowFunction)
 
     val accumulatorType: TypeInformation[ACC] = implicitly[TypeInformation[ACC]]
-    val aggregationResultType: TypeInformation[V] = implicitly[TypeInformation[V]]
     val resultType: TypeInformation[R] = implicitly[TypeInformation[R]]
     
     asScalaStream(javaStream.aggregate(
-      cleanedPreAggregator, applyFunction,
-      accumulatorType, aggregationResultType, resultType))
+      cleanedPreAggregator, applyFunction, accumulatorType, resultType))
   }
 
   /**
@@ -384,12 +382,10 @@ class AllWindowedStream[T, W <: Window](javaStream: JavaAllWStream[T, W]) {
     val applyFunction = new ScalaAllWindowFunction[V, R, W](cleanWindowFunction)
 
     val accumulatorType: TypeInformation[ACC] = implicitly[TypeInformation[ACC]]
-    val aggregationResultType: TypeInformation[V] = implicitly[TypeInformation[V]]
     val resultType: TypeInformation[R] = implicitly[TypeInformation[R]]
 
     asScalaStream(javaStream.aggregate(
-      cleanPreAggregator, applyFunction,
-      accumulatorType, aggregationResultType, resultType))
+      cleanPreAggregator, applyFunction, accumulatorType, resultType))
   }
 
   // ----------------------------- fold() -------------------------------------

@@ -73,10 +73,7 @@ public class ProcessOperator<IN, OUT>
 		this.currentWatermark = mark.getTimestamp();
 	}
 
-	private class ContextImpl
-			extends ProcessFunction<IN, OUT>.Context
-			implements TimerService {
-
+	private class ContextImpl extends ProcessFunction<IN, OUT>.Context implements TimerService {
 		private StreamRecord<IN> element;
 
 		private final ProcessingTimeService processingTimeService;
@@ -117,12 +114,22 @@ public class ProcessOperator<IN, OUT>
 
 		@Override
 		public void registerProcessingTimeTimer(long time) {
-			throw new UnsupportedOperationException("Setting timers is only supported on a KeyedStream.");
+			throw new UnsupportedOperationException(UNSUPPORTED_REGISTER_TIMER_MSG);
 		}
 
 		@Override
 		public void registerEventTimeTimer(long time) {
-			throw new UnsupportedOperationException("Setting timers is only supported on a KeyedStream.");
+			throw new UnsupportedOperationException(UNSUPPORTED_REGISTER_TIMER_MSG);
+		}
+
+		@Override
+		public void deleteProcessingTimeTimer(long time) {
+			throw new UnsupportedOperationException(UNSUPPORTED_DELETE_TIMER_MSG);
+		}
+
+		@Override
+		public void deleteEventTimeTimer(long time) {
+			throw new UnsupportedOperationException(UNSUPPORTED_DELETE_TIMER_MSG);
 		}
 
 		@Override

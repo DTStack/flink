@@ -24,15 +24,15 @@ import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.util.Preconditions;
 
-import org.apache.commons.cli.Option;
 import org.apache.commons.lang3.math.NumberUtils;
-import org.apache.hadoop.util.GenericOptionsParser;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.Arrays;
@@ -40,8 +40,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * This class provides simple utility methods for reading and parsing program arguments from different sources.
@@ -66,80 +68,42 @@ public class ParameterTool extends ExecutionConfig.GlobalJobParameters implement
 	 * @return A {@link ParameterTool}
 	 */
 	public static ParameterTool fromArgs(String[] args) {
-		Map<String, String> map = new HashMap<String, String>(args.length / 2);
+		final Map<String, String> map = new HashMap<>(args.length / 2);
 
-		String key = null;
-		String value = null;
-		boolean expectValue = false;
-		for (String arg : args) {
-			// check for -- argument
-			if (arg.startsWith("--")) {
-				if (expectValue) {
-					// we got into a new key, even though we were a value --> current key is one without value
-					if (value != null) {
-						throw new IllegalStateException("Unexpected state");
-					}
-					map.put(key, NO_VALUE_KEY);
-					// key will be overwritten in the next step
-				}
-				key = arg.substring(2);
-				expectValue = true;
-			} // check for - argument
-			else if (arg.startsWith("-")) {
-				// we are waiting for a value, so this is a - prefixed value (negative number)
-				if (expectValue) {
+		int i = 0;
+		while (i < args.length) {
+			final String key;
 
-					if (NumberUtils.isNumber(arg)) {
-						// negative number
-						value = arg;
-						expectValue = false;
-					} else {
-						if (value != null) {
-							throw new IllegalStateException("Unexpected state");
-						}
-						// We waited for a value but found a new key. So the previous key doesnt have a value.
-						map.put(key, NO_VALUE_KEY);
-						key = arg.substring(1);
-						expectValue = true;
-					}
-				} else {
-					// we are not waiting for a value, so its an argument
-					key = arg.substring(1);
-					expectValue = true;
-				}
+			if (args[i].startsWith("--")) {
+				key = args[i].substring(2);
+			} else if (args[i].startsWith("-")) {
+				key = args[i].substring(1);
 			} else {
-				if (expectValue) {
-					value = arg;
-					expectValue = false;
-				} else {
-					throw new RuntimeException("Error parsing arguments '" + Arrays.toString(args) + "' on '" + arg + "'. Unexpected value. Please prefix values with -- or -.");
-				}
+				throw new IllegalArgumentException(
+					String.format("Error parsing arguments '%s' on '%s'. Please prefix keys with -- or -.",
+						Arrays.toString(args), args[i]));
 			}
 
-			if (value == null && key == null) {
-				throw new IllegalStateException("Value and key can not be null at the same time");
-			}
-			if (key != null && value == null && !expectValue) {
-				throw new IllegalStateException("Value expected but flag not set");
-			}
-			if (key != null && value != null) {
-				map.put(key, value);
-				key = null;
-				value = null;
-				expectValue = false;
-			}
-			if (key != null && key.length() == 0) {
-				throw new IllegalArgumentException("The input " + Arrays.toString(args) + " contains an empty argument");
+			if (key.isEmpty()) {
+				throw new IllegalArgumentException(
+					"The input " + Arrays.toString(args) + " contains an empty argument");
 			}
 
-			if (key != null && !expectValue) {
+			i += 1; // try to find the value
+
+			if (i >= args.length) {
 				map.put(key, NO_VALUE_KEY);
-				key = null;
-				expectValue = false;
+			} else if (NumberUtils.isNumber(args[i])) {
+				map.put(key, args[i]);
+				i += 1;
+			} else if (args[i].startsWith("--") || args[i].startsWith("-")) {
+				// the argument cannot be a negative number because we checked earlier
+				// -> the next argument is a parameter name
+				map.put(key, NO_VALUE_KEY);
+			} else {
+				map.put(key, args[i]);
+				i += 1;
 			}
-		}
-		if (key != null) {
-			map.put(key, NO_VALUE_KEY);
 		}
 
 		return fromMap(map);
@@ -155,13 +119,37 @@ public class ParameterTool extends ExecutionConfig.GlobalJobParameters implement
 	 */
 	public static ParameterTool fromPropertiesFile(String path) throws IOException {
 		File propertiesFile = new File(path);
-		if (!propertiesFile.exists()) {
-			throw new FileNotFoundException("Properties file " + propertiesFile.getAbsolutePath() + " does not exist");
+		return fromPropertiesFile(propertiesFile);
+	}
+
+	/**
+	 * Returns {@link ParameterTool} for the given {@link Properties} file.
+	 *
+	 * @param file File object to the properties file
+	 * @return A {@link ParameterTool}
+	 * @throws IOException If the file does not exist
+	 * @see Properties
+	 */
+	public static ParameterTool fromPropertiesFile(File file) throws IOException {
+		if (!file.exists()) {
+			throw new FileNotFoundException("Properties file " + file.getAbsolutePath() + " does not exist");
 		}
+		try (FileInputStream fis = new FileInputStream(file)) {
+			return fromPropertiesFile(fis);
+		}
+	}
+
+	/**
+	 * Returns {@link ParameterTool} for the given InputStream from {@link Properties} file.
+	 *
+	 * @param inputStream InputStream from the properties file
+	 * @return A {@link ParameterTool}
+	 * @throws IOException If the file does not exist
+	 * @see Properties
+	 */
+	public static ParameterTool fromPropertiesFile(InputStream inputStream) throws IOException {
 		Properties props = new Properties();
-		try (FileInputStream fis = new FileInputStream(propertiesFile)) {
-			props.load(fis);
-		}
+		props.load(inputStream);
 		return fromMap((Map) props);
 	}
 
@@ -187,37 +175,40 @@ public class ParameterTool extends ExecutionConfig.GlobalJobParameters implement
 		return fromMap((Map) System.getProperties());
 	}
 
-	/**
-	 * Returns {@link ParameterTool} for the arguments parsed by {@link GenericOptionsParser}.
-	 *
-	 * @param args Input array arguments. It should be parsable by {@link GenericOptionsParser}
-	 * @return A {@link ParameterTool}
-	 * @throws IOException If arguments cannot be parsed by {@link GenericOptionsParser}
-	 * @see GenericOptionsParser
-	 * @deprecated Please use {@link org.apache.flink.hadoopcompatibility.HadoopUtils#paramsFromGenericOptionsParser(String[])}
-	 * from project flink-hadoop-compatibility
-	 */
-	@Deprecated
-	@PublicEvolving
-	public static ParameterTool fromGenericOptionsParser(String[] args) throws IOException {
-		Option[] options = new GenericOptionsParser(args).getCommandLine().getOptions();
-		Map<String, String> map = new HashMap<String, String>();
-		for (Option option : options) {
-			String[] split = option.getValue().split("=");
-			map.put(split[0], split[1]);
-		}
-		return fromMap(map);
-	}
-
 	// ------------------ ParameterUtil  ------------------------
 	protected final Map<String, String> data;
-	protected final Map<String, String> defaultData;
-	protected final Set<String> unrequestedParameters;
+
+	// data which is only used on the client and does not need to be transmitted
+	protected transient Map<String, String> defaultData;
+	protected transient Set<String> unrequestedParameters;
 
 	private ParameterTool(Map<String, String> data) {
-		this.data = new HashMap<>(data);
-		this.defaultData = new HashMap<>();
-		this.unrequestedParameters = new HashSet<>(data.keySet());
+		this.data = Collections.unmodifiableMap(new HashMap<>(data));
+
+		this.defaultData = new ConcurrentHashMap<>(data.size());
+
+		this.unrequestedParameters = Collections.newSetFromMap(new ConcurrentHashMap<>(data.size()));
+
+		unrequestedParameters.addAll(data.keySet());
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) {
+			return true;
+		}
+		if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
+		ParameterTool that = (ParameterTool) o;
+		return Objects.equals(data, that.data) &&
+			Objects.equals(defaultData, that.defaultData) &&
+			Objects.equals(unrequestedParameters, that.unrequestedParameters);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(data, defaultData, unrequestedParameters);
 	}
 
 	/**
@@ -468,7 +459,7 @@ public class ParameterTool extends ExecutionConfig.GlobalJobParameters implement
 	// --------------- Internals
 
 	protected void addToDefaults(String key, String value) {
-		String currentValue = defaultData.get(key);
+		final String currentValue = defaultData.get(key);
 		if (currentValue == null) {
 			if (value == null) {
 				value = DEFAULT_UNDEFINED;
@@ -491,7 +482,7 @@ public class ParameterTool extends ExecutionConfig.GlobalJobParameters implement
 	 * @return A {@link Configuration}
 	 */
 	public Configuration getConfiguration() {
-		Configuration conf = new Configuration();
+		final Configuration conf = new Configuration();
 		for (Map.Entry<String, String> entry : data.entrySet()) {
 			conf.setString(entry.getKey(), entry.getValue());
 		}
@@ -530,7 +521,7 @@ public class ParameterTool extends ExecutionConfig.GlobalJobParameters implement
 	 * @throws IOException If overwrite is not allowed and the file exists
 	 */
 	public void createPropertiesFile(String pathToFile, boolean overwrite) throws IOException {
-		File file = new File(pathToFile);
+		final File file = new File(pathToFile);
 		if (file.exists()) {
 			if (overwrite) {
 				file.delete();
@@ -538,7 +529,7 @@ public class ParameterTool extends ExecutionConfig.GlobalJobParameters implement
 				throw new RuntimeException("File " + pathToFile + " exists and overwriting is not allowed");
 			}
 		}
-		Properties defaultProps = new Properties();
+		final Properties defaultProps = new Properties();
 		defaultProps.putAll(this.defaultData);
 		try (final OutputStream out = new FileOutputStream(file)) {
 			defaultProps.store(out, "Default file created by Flink's ParameterUtil.createPropertiesFile()");
@@ -559,9 +550,21 @@ public class ParameterTool extends ExecutionConfig.GlobalJobParameters implement
 	 * @return The Merged {@link ParameterTool}
 	 */
 	public ParameterTool mergeWith(ParameterTool other) {
-		ParameterTool ret = new ParameterTool(this.data);
-		ret.data.putAll(other.data);
-		ret.unrequestedParameters.addAll(other.unrequestedParameters);
+		final Map<String, String> resultData = new HashMap<>(data.size() + other.data.size());
+		resultData.putAll(data);
+		resultData.putAll(other.data);
+
+		final ParameterTool ret = new ParameterTool(resultData);
+
+		final HashSet<String> requestedParametersLeft = new HashSet<>(data.keySet());
+		requestedParametersLeft.removeAll(unrequestedParameters);
+
+		final HashSet<String> requestedParametersRight = new HashSet<>(other.data.keySet());
+		requestedParametersRight.removeAll(other.unrequestedParameters);
+
+		ret.unrequestedParameters.removeAll(requestedParametersLeft);
+		ret.unrequestedParameters.removeAll(requestedParametersRight);
+
 		return ret;
 	}
 
@@ -572,4 +575,12 @@ public class ParameterTool extends ExecutionConfig.GlobalJobParameters implement
 		return data;
 	}
 
+	// ------------------------- Serialization ---------------------------------------------
+
+	private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+		in.defaultReadObject();
+
+		defaultData = new ConcurrentHashMap<>(data.size());
+		unrequestedParameters = Collections.newSetFromMap(new ConcurrentHashMap<>(data.size()));
+	}
 }

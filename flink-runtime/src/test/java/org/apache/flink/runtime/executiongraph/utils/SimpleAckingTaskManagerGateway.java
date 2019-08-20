@@ -20,21 +20,23 @@ package org.apache.flink.runtime.executiongraph.utils;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
-import org.apache.flink.runtime.blob.BlobKey;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
-import org.apache.flink.runtime.clusterframework.ApplicationStatus;
-import org.apache.flink.runtime.concurrent.Future;
-import org.apache.flink.runtime.concurrent.impl.FlinkCompletableFuture;
+import org.apache.flink.runtime.clusterframework.types.AllocationID;
+import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.PartitionInfo;
-import org.apache.flink.runtime.instance.InstanceID;
+import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobmanager.slots.TaskManagerGateway;
 import org.apache.flink.runtime.messages.Acknowledge;
-import org.apache.flink.runtime.messages.StackTrace;
 import org.apache.flink.runtime.messages.StackTraceSampleResponse;
 
+import java.util.Collection;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
 
 /**
  * A TaskManagerGateway that simply acks the basic operations (deploy, cancel, update) and does not
@@ -44,55 +46,67 @@ public class SimpleAckingTaskManagerGateway implements TaskManagerGateway {
 
 	private final String address = UUID.randomUUID().toString();
 
+	private Consumer<TaskDeploymentDescriptor> submitConsumer = ignore -> { };
+
+	private Consumer<ExecutionAttemptID> cancelConsumer = ignore -> { };
+
+	private volatile BiFunction<AllocationID, Throwable, CompletableFuture<Acknowledge>> freeSlotFunction;
+
+	private BiConsumer<JobID, Collection<ResultPartitionID>> releasePartitionsConsumer = (ignore1, ignore2) -> { };
+
+	public void setSubmitConsumer(Consumer<TaskDeploymentDescriptor> submitConsumer) {
+		this.submitConsumer = submitConsumer;
+	}
+
+	public void setCancelConsumer(Consumer<ExecutionAttemptID> cancelConsumer) {
+		this.cancelConsumer = cancelConsumer;
+	}
+
+	public void setFreeSlotFunction(BiFunction<AllocationID, Throwable, CompletableFuture<Acknowledge>> freeSlotFunction) {
+		this.freeSlotFunction = freeSlotFunction;
+	}
+
+	public void setReleasePartitionsConsumer(BiConsumer<JobID, Collection<ResultPartitionID>> releasePartitionsConsumer) {
+		this.releasePartitionsConsumer = releasePartitionsConsumer;
+	}
+
 	@Override
 	public String getAddress() {
 		return address;
 	}
 
 	@Override
-	public void disconnectFromJobManager(InstanceID instanceId, Exception cause) {}
-
-	@Override
-	public void stopCluster(ApplicationStatus applicationStatus, String message) {}
-
-	@Override
-	public Future<StackTrace> requestStackTrace(Time timeout) {
-		return FlinkCompletableFuture.completedExceptionally(new UnsupportedOperationException());
-	}
-
-	@Override
-	public Future<StackTraceSampleResponse> requestStackTraceSample(
+	public CompletableFuture<StackTraceSampleResponse> requestStackTraceSample(
 			ExecutionAttemptID executionAttemptID,
 			int sampleId,
 			int numSamples,
 			Time delayBetweenSamples,
 			int maxStackTraceDepth,
 			Time timeout) {
-		return FlinkCompletableFuture.completedExceptionally(new UnsupportedOperationException());
+		return FutureUtils.completedExceptionally(new UnsupportedOperationException());
 	}
 
 	@Override
-	public Future<Acknowledge> submitTask(TaskDeploymentDescriptor tdd, Time timeout) {
-		return FlinkCompletableFuture.completed(Acknowledge.get());
+	public CompletableFuture<Acknowledge> submitTask(TaskDeploymentDescriptor tdd, Time timeout) {
+		submitConsumer.accept(tdd);
+		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	@Override
-	public Future<Acknowledge> stopTask(ExecutionAttemptID executionAttemptID, Time timeout) {
-		return FlinkCompletableFuture.completed(Acknowledge.get());
+	public CompletableFuture<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, Time timeout) {
+		cancelConsumer.accept(executionAttemptID);
+		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	@Override
-	public Future<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, Time timeout) {
-		return FlinkCompletableFuture.completed(Acknowledge.get());
+	public CompletableFuture<Acknowledge> updatePartitions(ExecutionAttemptID executionAttemptID, Iterable<PartitionInfo> partitionInfos, Time timeout) {
+		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	@Override
-	public Future<Acknowledge> updatePartitions(ExecutionAttemptID executionAttemptID, Iterable<PartitionInfo> partitionInfos, Time timeout) {
-		return FlinkCompletableFuture.completed(Acknowledge.get());
+	public void releasePartitions(JobID jobId, Collection<ResultPartitionID> partitionIds) {
+		releasePartitionsConsumer.accept(jobId, partitionIds);
 	}
-
-	@Override
-	public void failPartition(ExecutionAttemptID executionAttemptID) {}
 
 	@Override
 	public void notifyCheckpointComplete(
@@ -107,15 +121,17 @@ public class SimpleAckingTaskManagerGateway implements TaskManagerGateway {
 			JobID jobId,
 			long checkpointId,
 			long timestamp,
-			CheckpointOptions checkpointOptions) {}
+			CheckpointOptions checkpointOptions,
+			boolean advanceToEndOfEventTime) {}
 
 	@Override
-	public Future<BlobKey> requestTaskManagerLog(Time timeout) {
-		return FlinkCompletableFuture.completedExceptionally(new UnsupportedOperationException());
-	}
+	public CompletableFuture<Acknowledge> freeSlot(AllocationID allocationId, Throwable cause, Time timeout) {
+		final BiFunction<AllocationID, Throwable, CompletableFuture<Acknowledge>> currentFreeSlotFunction = freeSlotFunction;
 
-	@Override
-	public Future<BlobKey> requestTaskManagerStdout(Time timeout) {
-		return FlinkCompletableFuture.completedExceptionally(new UnsupportedOperationException());
+		if (currentFreeSlotFunction != null) {
+			return currentFreeSlotFunction.apply(allocationId, cause);
+		} else {
+			return CompletableFuture.completedFuture(Acknowledge.get());
+		}
 	}
 }

@@ -18,12 +18,16 @@
 
 package org.apache.flink.runtime.executiongraph.restart;
 
-import org.apache.flink.configuration.AkkaOptions;
+import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.runtime.concurrent.impl.FlinkFuture;
+import org.apache.flink.runtime.concurrent.FutureUtils;
+import org.apache.flink.runtime.concurrent.ScheduledExecutor;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.util.Preconditions;
+
+import java.util.concurrent.CompletableFuture;
+
 import scala.concurrent.duration.Duration;
 
 /**
@@ -31,6 +35,7 @@ import scala.concurrent.duration.Duration;
  * with a fixed time delay in between.
  */
 public class FixedDelayRestartStrategy implements RestartStrategy {
+
 	private final int maxNumberRestartAttempts;
 	private final long delayBetweenRestartAttempts;
 	private int currentRestartAttempt;
@@ -57,9 +62,9 @@ public class FixedDelayRestartStrategy implements RestartStrategy {
 	}
 
 	@Override
-	public void restart(final ExecutionGraph executionGraph) {
+	public CompletableFuture<Void> restart(final RestartCallback restarter, ScheduledExecutor executor) {
 		currentRestartAttempt++;
-		FlinkFuture.supplyAsync(ExecutionGraphRestarter.restartWithDelay(executionGraph, delayBetweenRestartAttempts), executionGraph.getFutureExecutor());
+		return FutureUtils.scheduleWithDelay(restarter::triggerFullRecovery, Time.milliseconds(delayBetweenRestartAttempts), executor);
 	}
 
 	/**
@@ -72,28 +77,16 @@ public class FixedDelayRestartStrategy implements RestartStrategy {
 	public static FixedDelayRestartStrategyFactory createFactory(Configuration configuration) throws Exception {
 		int maxAttempts = configuration.getInteger(ConfigConstants.RESTART_STRATEGY_FIXED_DELAY_ATTEMPTS, 1);
 
-		String timeoutString = configuration.getString(
-			AkkaOptions.WATCH_HEARTBEAT_INTERVAL);
-
-		String delayString = configuration.getString(
-			ConfigConstants.RESTART_STRATEGY_FIXED_DELAY_DELAY,
-			timeoutString
-		);
+		String delayString = configuration.getString(ConfigConstants.RESTART_STRATEGY_FIXED_DELAY_DELAY);
 
 		long delay;
 
 		try {
 			delay = Duration.apply(delayString).toMillis();
 		} catch (NumberFormatException nfe) {
-			if (delayString.equals(timeoutString)) {
-				throw new Exception("Invalid config value for " +
-						AkkaOptions.WATCH_HEARTBEAT_PAUSE.key() + ": " + timeoutString +
-						". Value must be a valid duration (such as '10 s' or '1 min')");
-			} else {
-				throw new Exception("Invalid config value for " +
-						ConfigConstants.RESTART_STRATEGY_FIXED_DELAY_DELAY + ": " + delayString +
-						". Value must be a valid duration (such as '100 milli' or '10 s')");
-			}
+			throw new Exception("Invalid config value for " +
+					ConfigConstants.RESTART_STRATEGY_FIXED_DELAY_DELAY + ": " + delayString +
+					". Value must be a valid duration (such as '100 milli' or '10 s')");
 		}
 
 		return new FixedDelayRestartStrategyFactory(maxAttempts, delay);

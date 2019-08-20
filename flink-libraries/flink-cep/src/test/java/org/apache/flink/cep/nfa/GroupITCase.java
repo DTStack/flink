@@ -19,22 +19,24 @@
 package org.apache.flink.cep.nfa;
 
 import org.apache.flink.cep.Event;
-import org.apache.flink.cep.nfa.compiler.NFACompiler;
 import org.apache.flink.cep.pattern.GroupPattern;
 import org.apache.flink.cep.pattern.Pattern;
 import org.apache.flink.cep.pattern.conditions.SimpleCondition;
+import org.apache.flink.cep.utils.NFATestHarness;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.util.TestLogger;
 
-import com.google.common.collect.Lists;
+import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
+
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.apache.flink.cep.nfa.NFATestUtilities.compareMaps;
-import static org.apache.flink.cep.nfa.NFATestUtilities.feedNFA;
-import static org.junit.Assert.assertTrue;
+import static org.apache.flink.cep.utils.NFATestUtilities.compareMaps;
+import static org.apache.flink.cep.utils.NFATestUtilities.feedNFA;
+import static org.apache.flink.cep.utils.NFAUtils.compile;
+import static org.junit.Assert.assertEquals;
 
 /**
  * IT tests covering {@link GroupPattern}.
@@ -43,7 +45,7 @@ import static org.junit.Assert.assertTrue;
 public class GroupITCase extends TestLogger {
 
 	@Test
-	public void testGroupFollowedByTimes() {
+	public void testGroupFollowedByTimes() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event c = new Event(40, "c", 1.0);
@@ -91,7 +93,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -101,7 +103,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupFollowedByOptional() {
+	public void testGroupFollowedByOptional() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event c = new Event(40, "c", 1.0);
@@ -147,7 +149,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -158,7 +160,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testFollowedByGroupTimesOptional() {
+	public void testFollowedByGroupTimesOptional() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event c = new Event(40, "c", 1.0);
@@ -200,7 +202,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -210,7 +212,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupFollowedByOneOrMore() {
+	public void testGroupFollowedByOneOrMore() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event c = new Event(40, "c", 1.0);
@@ -258,7 +260,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -269,7 +271,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupFollowedByZeroOrMore() {
+	public void testGroupFollowedByZeroOrMore() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event c = new Event(40, "c", 1.0);
@@ -317,7 +319,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -329,7 +331,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupFollowedByAnyTimesCombinations() {
+	public void testGroupFollowedByAnyTimesCombinations() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event c = new Event(40, "c", 1.0);
@@ -381,7 +383,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -393,7 +395,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupFollowedByAnyTimesOptional() {
+	public void testGroupFollowedByAnyTimesOptional() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event c = new Event(40, "c", 1.0);
@@ -445,7 +447,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -457,7 +459,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupFollowedByAnyOneOrMore() {
+	public void testGroupFollowedByAnyOneOrMore() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event c = new Event(40, "c", 1.0);
@@ -509,7 +511,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -524,7 +526,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupNextZeroOrMore() {
+	public void testGroupNextZeroOrMore() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event c = new Event(40, "c", 1.0);
@@ -576,7 +578,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -589,7 +591,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupNotFollowedBy() {
+	public void testGroupNotFollowedBy() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event c = new Event(40, "c", 1.0);
@@ -646,7 +648,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -656,7 +658,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupNotNext() {
+	public void testGroupNotNext() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event c = new Event(40, "c", 1.0);
@@ -713,7 +715,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -723,7 +725,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupNest() {
+	public void testGroupNest() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event d = new Event(40, "d", 1.0);
@@ -780,7 +782,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -793,7 +795,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupNestTimes() {
+	public void testGroupNestTimes() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event d = new Event(40, "d", 1.0);
@@ -868,7 +870,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -881,7 +883,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupNestTimesConsecutive() {
+	public void testGroupNestTimesConsecutive() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event d = new Event(40, "d", 1.0);
@@ -957,7 +959,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -968,7 +970,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupBegin() {
+	public void testGroupBegin() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event a1 = new Event(41, "a", 2.0);
@@ -1007,7 +1009,7 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
 		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
 
@@ -1019,7 +1021,7 @@ public class GroupITCase extends TestLogger {
 	}
 
 	@Test
-	public void testGroupFollowedByOneOrMoreWithUntilCondition() {
+	public void testGroupFollowedByOneOrMoreWithUntilCondition() throws Exception {
 		List<StreamRecord<Event>> inputEvents = new ArrayList<>();
 
 		Event c = new Event(40, "c", 1.0);
@@ -1072,16 +1074,20 @@ public class GroupITCase extends TestLogger {
 			}
 		});
 
-		NFA<Event> nfa = NFACompiler.compile(pattern, Event.createTypeSerializer(), false);
+		NFA<Event> nfa = compile(pattern, false);
 
-		final List<List<Event>> resultingPatterns = feedNFA(inputEvents, nfa);
+		NFAState nfaState = nfa.createInitialNFAState();
+
+		NFATestHarness nfaTestHarness = NFATestHarness.forNFA(nfa).withNFAState(nfaState).build();
+		final List<List<Event>> resultingPatterns = nfaTestHarness.feedRecords(inputEvents);
 
 		compareMaps(resultingPatterns, Lists.<List<Event>>newArrayList(
 			Lists.newArrayList(c, a1, b1, d),
 			Lists.newArrayList(c, a1, b1, a2, b2, d)
 		));
 
-		assertTrue(nfa.isEmpty());
+		assertEquals(1, nfaState.getPartialMatches().size());
+		assertEquals("start", nfaState.getPartialMatches().peek().getCurrentStateName());
 	}
 
 }
