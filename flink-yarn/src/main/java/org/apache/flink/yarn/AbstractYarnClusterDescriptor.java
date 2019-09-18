@@ -111,12 +111,6 @@ import static org.apache.flink.yarn.cli.FlinkYarnSessionCli.getDynamicProperties
 public abstract class AbstractYarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 	private static final Logger LOG = LoggerFactory.getLogger(AbstractYarnClusterDescriptor.class);
 
-	/**
-	 * Minimum memory requirements, checked by the Client.
-	 */
-	private static final int MIN_JM_MEMORY = 768; // the minimum memory should be higher than the min heap cutoff
-	private static final int MIN_TM_MEMORY = 768;
-
 	private final YarnConfiguration yarnConfiguration;
 
 	private final YarnClient yarnClient;
@@ -280,18 +274,27 @@ public abstract class AbstractYarnClusterDescriptor implements ClusterDescriptor
 		}
 
 		// Check if we don't exceed YARN's maximum virtual cores.
-		// The number of cores can be configured in the config.
-		// If not configured, it is set to the number of task slots
-		int numYarnVcores = yarnConfiguration.getInt(YarnConfiguration.NM_VCORES, YarnConfiguration.DEFAULT_NM_VCORES);
+		// Fetch numYarnMaxVcores from all the RUNNING nodes via yarnClient
+		final int numYarnMaxVcores;
+		try {
+			numYarnMaxVcores = yarnClient.getNodeReports(NodeState.RUNNING)
+				.stream()
+				.mapToInt(report -> report.getCapability().getVirtualCores())
+				.max()
+				.orElse(0);
+		} catch (Exception e) {
+			throw new YarnDeploymentException("Couldn't get cluster description, please check on the YarnConfiguration", e);
+		}
+
 		int configuredVcores = flinkConfiguration.getInteger(YarnConfigOptions.VCORES, clusterSpecification.getSlotsPerTaskManager());
 		// don't configure more than the maximum configured number of vcores
-		if (configuredVcores > numYarnVcores) {
+		if (configuredVcores > numYarnMaxVcores) {
 			throw new IllegalConfigurationException(
-				String.format("The number of virtual cores per node were configured with %d" +
-						" but Yarn only has %d virtual cores available. Please note that the number" +
-						" of virtual cores is set to the number of task slots by default unless configured" +
-						" in the Flink config with '%s.'",
-					configuredVcores, numYarnVcores, YarnConfigOptions.VCORES.key()));
+				String.format("The number of requested virtual cores per node %d" +
+						" exceeds the maximum number of virtual cores %d available in the Yarn Cluster." +
+						" Please note that the number of virtual cores is set to the number of task slots by default" +
+						" unless configured in the Flink config with '%s.'",
+					configuredVcores, numYarnMaxVcores, YarnConfigOptions.VCORES.key()));
 		}
 
 		// check if required Hadoop environment variables are set. If not, warn user
@@ -536,7 +539,7 @@ public abstract class AbstractYarnClusterDescriptor implements ClusterDescriptor
 			jobGraph,
 			yarnClient,
 			yarnApplication,
-			clusterSpecification);
+			validClusterSpecification);
 
 		String host = report.getHost();
 		int port = report.getRpcPort();
@@ -551,8 +554,8 @@ public abstract class AbstractYarnClusterDescriptor implements ClusterDescriptor
 		// the Flink cluster is deployed in YARN. Represent cluster
 		return createYarnClusterClient(
 			this,
-			clusterSpecification.getNumberTaskManagers(),
-			clusterSpecification.getSlotsPerTaskManager(),
+			validClusterSpecification.getNumberTaskManagers(),
+			validClusterSpecification.getSlotsPerTaskManager(),
 			report,
 			flinkConfiguration,
 			true);
@@ -567,16 +570,6 @@ public abstract class AbstractYarnClusterDescriptor implements ClusterDescriptor
 		int taskManagerCount = clusterSpecification.getNumberTaskManagers();
 		int jobManagerMemoryMb = clusterSpecification.getMasterMemoryMB();
 		int taskManagerMemoryMb = clusterSpecification.getTaskManagerMemoryMB();
-
-		if (jobManagerMemoryMb < MIN_JM_MEMORY) {
-			LOG.warn("The minimum JobManager memory is {}. Will set the JobManager memory to this value.", MIN_JM_MEMORY);
-			jobManagerMemoryMb = MIN_JM_MEMORY;
-		}
-
-		if (taskManagerMemoryMb < MIN_TM_MEMORY) {
-			LOG.warn("The minimum TaskManager memory is {}. Will set the Taskmanager memory to this value.", MIN_TM_MEMORY);
-			taskManagerMemoryMb = MIN_TM_MEMORY;
-		}
 
 		if (jobManagerMemoryMb < yarnMinAllocationMB || taskManagerMemoryMb < yarnMinAllocationMB) {
 			LOG.warn("The JobManager or TaskManager memory is below the smallest possible YARN Container size. "

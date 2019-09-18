@@ -32,7 +32,7 @@ import java.util.Collections;
 import static org.apache.flink.streaming.tests.DataStreamAllroundTestJobFactory.createArtificialKeyedStateMapper;
 import static org.apache.flink.streaming.tests.DataStreamAllroundTestJobFactory.createArtificialOperatorStateMapper;
 import static org.apache.flink.streaming.tests.DataStreamAllroundTestJobFactory.createEventSource;
-import static org.apache.flink.streaming.tests.DataStreamAllroundTestJobFactory.createExceptionThrowingFailureMapper;
+import static org.apache.flink.streaming.tests.DataStreamAllroundTestJobFactory.createFailureMapper;
 import static org.apache.flink.streaming.tests.DataStreamAllroundTestJobFactory.createSemanticsCheckMapper;
 import static org.apache.flink.streaming.tests.DataStreamAllroundTestJobFactory.createTimestampExtractor;
 import static org.apache.flink.streaming.tests.DataStreamAllroundTestJobFactory.isSimulateFailures;
@@ -58,7 +58,7 @@ public class DataStreamAllroundTestProgram {
 	private static final String KEYED_STATE_OPER_NAME = "ArtificalKeyedStateMapper";
 	private static final String OPERATOR_STATE_OPER_NAME = "ArtificalOperatorStateMapper";
 	private static final String SEMANTICS_CHECK_MAPPER_NAME = "SemanticsCheckMapper";
-	private static final String FAILURE_MAPPER_NAME = "ExceptionThrowingFailureMapper";
+	private static final String FAILURE_MAPPER_NAME = "FailureMapper";
 
 	public static void main(String[] args) throws Exception {
 		final ParameterTool pt = ParameterTool.fromArgs(args);
@@ -67,7 +67,7 @@ public class DataStreamAllroundTestProgram {
 
 		setupEnvironment(env, pt);
 
-		DataStream<Event> eventStream = env.addSource(createEventSource(pt))
+		DataStream<Event> eventStream = env.addSource(createEventSource(pt)).uid("0001")
 			.assignTimestampsAndWatermarks(createTimestampExtractor(pt))
 			.keyBy(Event::getKey)
 			.map(createArtificialKeyedStateMapper(
@@ -85,24 +85,25 @@ public class DataStreamAllroundTestProgram {
 				)
 			)
 			.name(KEYED_STATE_OPER_NAME)
-			.returns(Event.class);
+			.returns(Event.class)
+			.uid("0002");
 
 		DataStream<Event> eventStream2 = eventStream
 			.map(createArtificialOperatorStateMapper((MapFunction<Event, Event>) in -> in))
-			.name(OPERATOR_STATE_OPER_NAME)
-			.returns(Event.class);
+			.returns(Event.class)
+			.name(OPERATOR_STATE_OPER_NAME).uid("0003");
 
 		if (isSimulateFailures(pt)) {
 			eventStream2 = eventStream2
-				.map(createExceptionThrowingFailureMapper(pt))
+				.map(createFailureMapper(pt))
 				.setParallelism(1)
-				.name(FAILURE_MAPPER_NAME);
+				.name(FAILURE_MAPPER_NAME).uid("0004");
 		}
 
 		eventStream2.keyBy(Event::getKey)
 			.flatMap(createSemanticsCheckMapper(pt))
-			.name(SEMANTICS_CHECK_MAPPER_NAME)
-			.addSink(new PrintSinkFunction<>());
+			.name(SEMANTICS_CHECK_MAPPER_NAME).uid("0005")
+			.addSink(new PrintSinkFunction<>()).uid("0006");
 
 		env.execute("General purpose test job");
 	}

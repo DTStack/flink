@@ -215,7 +215,7 @@ function start_cluster {
 }
 
 function check_logs_for_errors {
-  if grep -rv "GroupCoordinatorNotAvailableException" $FLINK_DIR/log \
+  error_count=$(grep -rv "GroupCoordinatorNotAvailableException" $FLINK_DIR/log \
       | grep -v "RetriableCommitFailedException" \
       | grep -v "NoAvailableBrokersException" \
       | grep -v "Async Kafka commit failed" \
@@ -229,7 +229,8 @@ function check_logs_for_errors {
       | grep -v "An exception was thrown by an exception handler" \
       | grep -v "java.lang.NoClassDefFoundError: org/apache/hadoop/yarn/exceptions/YarnException" \
       | grep -v "java.lang.NoClassDefFoundError: org/apache/hadoop/conf/Configuration" \
-      | grep -iq "error"; then
+      | grep -ic "error")
+  if [[ ${error_count} -gt 0 ]]; then
     echo "Found error in log files:"
     cat $FLINK_DIR/log/*
     EXIT_CODE=1
@@ -237,7 +238,7 @@ function check_logs_for_errors {
 }
 
 function check_logs_for_exceptions {
-  if grep -rv "GroupCoordinatorNotAvailableException" $FLINK_DIR/log \
+  exception_count=$(grep -rv "GroupCoordinatorNotAvailableException" $FLINK_DIR/log \
       | grep -v "RetriableCommitFailedException" \
       | grep -v "NoAvailableBrokersException" \
       | grep -v "Async Kafka commit failed" \
@@ -252,7 +253,10 @@ function check_logs_for_exceptions {
       | grep -v "Caused by: java.lang.ClassNotFoundException: org.apache.hadoop.conf.Configuration" \
       | grep -v "java.lang.NoClassDefFoundError: org/apache/hadoop/yarn/exceptions/YarnException" \
       | grep -v "java.lang.NoClassDefFoundError: org/apache/hadoop/conf/Configuration" \
-      | grep -iq "exception"; then
+      | grep -v "java.lang.Exception: Artificial failure" \
+      | grep -v "org.apache.flink.runtime.checkpoint.decline" \
+      | grep -ic "exception")
+  if [[ ${exception_count} -gt 0 ]]; then
     echo "Found exception in log files:"
     cat $FLINK_DIR/log/*
     EXIT_CODE=1
@@ -400,6 +404,15 @@ function tm_watchdog {
   done
 }
 
+function start_taskmanagers {
+    tmnum=$1
+    echo "Start ${tmnum} more task managers"
+    for (( c=0; c<tmnum; c++ ))
+    do
+        $FLINK_DIR/bin/taskmanager.sh start
+    done
+}
+
 # Kills all job manager.
 function jm_kill_all {
   kill_all 'StandaloneSessionClusterEntrypoint'
@@ -517,4 +530,11 @@ function clean_stdout_files {
 function clean_log_files {
     rm ${FLINK_DIR}/log/*
     echo "Deleted all files under ${FLINK_DIR}/log/"
+}
+
+function find_latest_completed_checkpoint {
+    local checkpoint_root_directory=$1
+    # a completed checkpoint must contain the _metadata file
+    local checkpoint_meta_file=$(ls -d ${checkpoint_root_directory}/chk-[1-9]*/_metadata | sort -Vr | head -n1)
+    echo "$(dirname "${checkpoint_meta_file}")"
 }
