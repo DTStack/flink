@@ -155,6 +155,10 @@ public class TaskManagerRunner implements FatalErrorHandler, AutoCloseableAsync 
 		this.terminationFuture = new CompletableFuture<>();
 		this.shutdown = false;
 
+		Runtime.getRuntime().addShutdownHook(new Thread(()->{
+			this.shutDownHook();
+		}));
+
 		MemoryLogger.startIfConfigured(LOG, configuration, actorSystem);
 	}
 
@@ -164,6 +168,38 @@ public class TaskManagerRunner implements FatalErrorHandler, AutoCloseableAsync 
 
 	public void start() throws Exception {
 		taskManager.start();
+	}
+
+	private void shutDownHook() {
+		synchronized (lock) {
+
+			try {
+				LOG.info("metricRegistry close run..");
+				metricRegistry.shutdown();
+				LOG.info("metricRegistry close finish..");
+			} catch (Exception e) {
+				LOG.info("metricRegistry close error..", e);
+			}
+
+			try {
+				LOG.info("blobCacheService close run..");
+				blobCacheService.close();
+				LOG.info("blobCacheService close finish..");
+			} catch (Exception e) {
+				LOG.info("blobCacheService close error..", e);
+			}
+
+
+			try {
+				LOG.info("highAvailabilityServices close run..");
+				highAvailabilityServices.close();
+				LOG.info("highAvailabilityServices close finish..");
+
+			} catch (Exception e) {
+				LOG.info("highAvailabilityServices close error..", e);
+			}
+
+		}
 	}
 
 	@Override
