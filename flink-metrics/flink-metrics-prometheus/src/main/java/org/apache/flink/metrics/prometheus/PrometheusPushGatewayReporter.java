@@ -84,6 +84,8 @@ public class PrometheusPushGatewayReporter extends AbstractPrometheusReporter im
 		if (deleteOnShutdown && pushGateway != null) {
 			try {
 				pushGateway.delete(jobName);
+
+				log.info("Delete pushGateway of jobName:{}", jobName);
 			} catch (IOException e) {
 				log.warn("Failed to delete metrics from PushGateway with jobName {}.", jobName, e);
 			}
