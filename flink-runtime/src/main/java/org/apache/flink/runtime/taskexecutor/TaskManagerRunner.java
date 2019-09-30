@@ -59,6 +59,7 @@ import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.ExecutorUtils;
 
 import akka.actor.ActorSystem;
+import org.apache.flink.util.ShutdownHookUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -116,6 +117,8 @@ public class TaskManagerRunner implements FatalErrorHandler, AutoCloseableAsync 
 
 	private boolean shutdown;
 
+	private boolean shutDownServices;
+
 	public TaskManagerRunner(Configuration configuration, ResourceID resourceId) throws Exception {
 		this.configuration = checkNotNull(configuration);
 		this.resourceId = checkNotNull(resourceId);
@@ -158,6 +161,7 @@ public class TaskManagerRunner implements FatalErrorHandler, AutoCloseableAsync 
 
 		this.terminationFuture = new CompletableFuture<>();
 		this.shutdown = false;
+		this.shutDownServices = false;
 
 		MemoryLogger.startIfConfigured(LOG, configuration, metricQueryServiceActorSystem);
 	}
@@ -170,12 +174,26 @@ public class TaskManagerRunner implements FatalErrorHandler, AutoCloseableAsync 
 		taskManager.start();
 	}
 
+	public void closeAsyncByShutdownHook() {
+		LOG.info("Running ShutdownHook of TaskManagerRunner, the method: closeAsyncByShutdownHook...");
+
+		if (!shutdown) {
+			LOG.info("Running ShutdownHook of TaskManagerRunner closeAsync...");
+			closeAsync();
+		}
+		if (!shutDownServices) {
+			LOG.info("Running ShutdownHook of TaskManagerRunner shutDownServices...");
+			shutDownServices();
+		}
+	}
+
 	@Override
 	public CompletableFuture<Void> closeAsync() {
 		synchronized (lock) {
 			if (!shutdown) {
 				shutdown = true;
 
+				LOG.info("TaskManagerRunner closeAsync...");
 				final CompletableFuture<Void> taskManagerTerminationFuture = taskManager.closeAsync();
 
 				final CompletableFuture<Void> serviceTerminationFuture = FutureUtils.composeAfterwards(
@@ -201,34 +219,39 @@ public class TaskManagerRunner implements FatalErrorHandler, AutoCloseableAsync 
 			Collection<CompletableFuture<Void>> terminationFutures = new ArrayList<>(3);
 			Exception exception = null;
 
-			try {
-				blobCacheService.close();
-			} catch (Exception e) {
-				exception = ExceptionUtils.firstOrSuppressed(e, exception);
-			}
+			if (!shutDownServices) {
+				shutDownServices = true;
 
-			try {
-				metricRegistry.shutdown();
-			} catch (Exception e) {
-				exception = ExceptionUtils.firstOrSuppressed(e, exception);
-			}
+				LOG.info("TaskManagerRunner shutDownServices...");
+				try {
+					blobCacheService.close();
+				} catch (Exception e) {
+					exception = ExceptionUtils.firstOrSuppressed(e, exception);
+				}
 
-			if (metricQueryServiceActorSystem != null) {
-				terminationFutures.add(AkkaUtils.terminateActorSystem(metricQueryServiceActorSystem));
-			}
+				try {
+					metricRegistry.shutdown();
+				} catch (Exception e) {
+					exception = ExceptionUtils.firstOrSuppressed(e, exception);
+				}
 
-			try {
-				highAvailabilityServices.close();
-			} catch (Exception e) {
-				exception = ExceptionUtils.firstOrSuppressed(e, exception);
-			}
+				if (metricQueryServiceActorSystem != null) {
+					terminationFutures.add(AkkaUtils.terminateActorSystem(metricQueryServiceActorSystem));
+				}
 
-			terminationFutures.add(rpcService.stopService());
+				try {
+					highAvailabilityServices.close();
+				} catch (Exception e) {
+					exception = ExceptionUtils.firstOrSuppressed(e, exception);
+				}
 
-			terminationFutures.add(ExecutorUtils.nonBlockingShutdown(timeout.toMilliseconds(), TimeUnit.MILLISECONDS, executor));
+				terminationFutures.add(rpcService.stopService());
 
-			if (exception != null) {
-				terminationFutures.add(FutureUtils.completedExceptionally(exception));
+				terminationFutures.add(ExecutorUtils.nonBlockingShutdown(timeout.toMilliseconds(), TimeUnit.MILLISECONDS, executor));
+
+				if (exception != null) {
+					terminationFutures.add(FutureUtils.completedExceptionally(exception));
+				}
 			}
 
 			return FutureUtils.completeAll(terminationFutures);
@@ -332,6 +355,8 @@ public class TaskManagerRunner implements FatalErrorHandler, AutoCloseableAsync 
 		final TaskManagerRunner taskManagerRunner = new TaskManagerRunner(configuration, resourceId);
 
 		taskManagerRunner.start();
+
+		ShutdownHookUtil.addShutdownHook(taskManagerRunner::closeAsyncByShutdownHook, taskManagerRunner.getClass().getSimpleName(), LOG);
 	}
 
 	// --------------------------------------------------------------------------------------------
