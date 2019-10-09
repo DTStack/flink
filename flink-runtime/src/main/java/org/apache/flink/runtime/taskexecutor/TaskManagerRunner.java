@@ -174,16 +174,15 @@ public class TaskManagerRunner implements FatalErrorHandler, AutoCloseableAsync 
 		taskManager.start();
 	}
 
-	public void closeAsyncByShutdownHook() {
+	private void closeAsyncByShutdownHook() {
 		LOG.info("Running ShutdownHook of TaskManagerRunner, the method: closeAsyncByShutdownHook...");
 
-		if (!shutdown) {
-			LOG.info("Running ShutdownHook of TaskManagerRunner closeAsync...");
-			closeAsync();
-		}
 		if (!shutDownServices) {
-			LOG.info("Running ShutdownHook of TaskManagerRunner shutDownServices...");
-			shutDownServices();
+			try {
+				metricRegistry.shutdown();
+			} catch (Exception e) {
+				LOG.error("{}", e);
+			}
 		}
 	}
 
