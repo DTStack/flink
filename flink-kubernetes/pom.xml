@@ -70,6 +70,12 @@ under the License.
 			<version>${kubernetes.client.version}</version>
 		</dependency>
 
+		<dependency>
+			<groupId>dom4j</groupId>
+			<artifactId>dom4j</artifactId>
+			<version>1.6.1</version>
+		</dependency>
+
 		<!-- test dependencies -->
 		<dependency>
 			<groupId>io.fabric8</groupId>

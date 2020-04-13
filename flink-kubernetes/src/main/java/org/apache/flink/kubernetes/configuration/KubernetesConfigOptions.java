@@ -123,6 +123,20 @@ public class KubernetesConfigOptions {
 		.withDescription("The flink conf directory that will be mounted in pod. The flink-conf.yaml, log4j.properties, " +
 			"logback.xml in this path will be overwritten from config map.");
 
+	public static final ConfigOption<String> HADOOP_CONF_DIR =
+		key("kubernetes.hadoop.conf.dir")
+		.stringType()
+		.defaultValue("/opt/hadoop/etc/hadoop")
+		.withDescription("The hadoop conf directory that will be mounted in pod. The core-site.xml" +
+			"in this path will be overwritten from config map.");
+
+	public static final ConfigOption<String> HADOOP_CONF_STRING =
+		key("hadoop.conf.string")
+		.stringType()
+		.defaultValue(null)
+		.withDescription("The hadoop conf content that will be mounted in pod");
+
+
 	public static final ConfigOption<String> FLINK_LOG_DIR =
 		key("kubernetes.flink.log.dir")
 		.stringType()

@@ -36,6 +36,8 @@ import io.fabric8.kubernetes.api.model.PodSpecBuilder;
 import io.fabric8.kubernetes.api.model.Volume;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -78,9 +80,15 @@ public class TaskManagerPodDecorator extends Decorator<Pod, KubernetesPod> {
 		pod.getMetadata().setName(this.parameter.getPodName());
 
 		final Volume configMapVolume = KubernetesUtils.getConfigMapVolume(clusterId, hasLogback, hasLog4j);
+		List<Volume> volumes = new ArrayList<>();
+		volumes.add(configMapVolume);
+		if (flinkConfig.contains(KubernetesConfigOptions.HADOOP_CONF_STRING)) {
+			final Volume hadoopConfigMapVolume = KubernetesUtils.getHadoopConfigMapVolume(clusterId);
+			volumes.add(hadoopConfigMapVolume);
+		}
 
 		pod.setSpec(new PodSpecBuilder()
-			.withVolumes(configMapVolume)
+			.withVolumes(volumes)
 			.withContainers(createTaskManagerContainer(flinkConfig, hasLogback, hasLog4j, taskManagerRpcPort))
 			.build());
 		return pod;
@@ -91,7 +99,6 @@ public class TaskManagerPodDecorator extends Decorator<Pod, KubernetesPod> {
 			boolean hasLogBack,
 			boolean hasLog4j,
 			int taskManagerRpcPort) {
-		final String flinkConfDirInPod = flinkConfig.getString(KubernetesConfigOptions.FLINK_CONF_DIR);
 		return new ContainerBuilder()
 			.withName(CONTAINER_NAME)
 			.withCommand(flinkConfig.getString(KubernetesConfigOptions.KUBERNETES_ENTRY_PATH))
@@ -107,7 +114,7 @@ public class TaskManagerPodDecorator extends Decorator<Pod, KubernetesPod> {
 				.stream()
 				.map(kv -> new EnvVar(kv.getKey(), kv.getValue(), null))
 				.collect(Collectors.toList()))
-			.withVolumeMounts(KubernetesUtils.getConfigMapVolumeMount(flinkConfDirInPod, hasLogBack, hasLog4j))
+			.withVolumeMounts(KubernetesUtils.getConfigMapVolumeMount(flinkConfig, hasLogBack, hasLog4j))
 			.build();
 	}
 }

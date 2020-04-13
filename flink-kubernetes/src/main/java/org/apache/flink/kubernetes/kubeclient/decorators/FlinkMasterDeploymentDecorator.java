@@ -46,6 +46,7 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpecBuilder;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -94,12 +95,19 @@ public class FlinkMasterDeploymentDecorator extends Decorator<Deployment, Kubern
 
 		final Volume configMapVolume = KubernetesUtils.getConfigMapVolume(clusterId, hasLogback, hasLog4j);
 
+		List<Volume> volumes = new ArrayList<>();
+		volumes.add(configMapVolume);
+		if (flinkConfig.contains(KubernetesConfigOptions.HADOOP_CONF_STRING)) {
+			final Volume hadoopConfigMapVolume = KubernetesUtils.getHadoopConfigMapVolume(clusterId);
+			volumes.add(hadoopConfigMapVolume);
+		}
+
 		final Container container = createJobManagerContainer(flinkConfig, mainClass, hasLogback, hasLog4j, blobServerPort);
 
 		final String serviceAccount = flinkConfig.getString(KubernetesConfigOptions.JOB_MANAGER_SERVICE_ACCOUNT);
 		final PodSpec podSpec = new PodSpecBuilder()
 			.withServiceAccountName(serviceAccount)
-			.withVolumes(configMapVolume)
+			.withVolumes(volumes)
 			.withContainers(container)
 			.build();
 
@@ -145,7 +153,7 @@ public class FlinkMasterDeploymentDecorator extends Decorator<Deployment, Kubern
 				new ContainerPortBuilder().withContainerPort(flinkConfig.getInteger(JobManagerOptions.PORT)).build(),
 				new ContainerPortBuilder().withContainerPort(blobServerPort).build()))
 			.withEnv(buildEnvForContainer(flinkConfig))
-			.withVolumeMounts(KubernetesUtils.getConfigMapVolumeMount(flinkConfDirInPod, hasLogback, hasLog4j))
+			.withVolumeMounts(KubernetesUtils.getConfigMapVolumeMount(flinkConfig, hasLogback, hasLog4j))
 			.build();
 	}
 

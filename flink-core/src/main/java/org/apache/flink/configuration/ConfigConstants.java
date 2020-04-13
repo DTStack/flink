@@ -2017,6 +2017,9 @@ public final class ConfigConstants {
 	/** The user lib directory name. */
 	public static final String DEFAULT_FLINK_USR_LIB_DIR = "usrlib";
 
+	/** The hadoop conf directory name. */
+	public static final String ENV_HADOOP_CONF_DIR = "HADOOP_CONF_DIR";
+
 	// ---------------------------- Encoding ------------------------------
 
 	public static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;

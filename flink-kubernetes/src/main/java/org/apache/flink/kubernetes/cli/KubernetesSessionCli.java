@@ -28,23 +28,33 @@ import org.apache.flink.client.deployment.ClusterClientServiceLoader;
 import org.apache.flink.client.deployment.ClusterDescriptor;
 import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
 import org.apache.flink.client.program.ClusterClient;
+import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.configuration.UnmodifiableConfiguration;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.executors.KubernetesSessionClusterExecutor;
 import org.apache.flink.kubernetes.kubeclient.FlinkKubeClient;
 import org.apache.flink.kubernetes.kubeclient.KubeClientFactory;
 import org.apache.flink.runtime.security.SecurityUtils;
 import org.apache.flink.util.FlinkException;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.cli.CommandLine;
+import org.dom4j.Document;
+import org.dom4j.Element;
+import org.dom4j.io.SAXReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -78,10 +88,48 @@ public class KubernetesSessionCli {
 		this.cli = new ExecutorCLI(baseConfiguration);
 	}
 
+	public void addHadoopConf(String hadoopConfDir, Configuration configuration) {
+		try {
+			Map<String, Object> confMap = new HashMap();
+			SAXReader reader = new SAXReader();
+			Document coreDocument = reader.read(new File(hadoopConfDir, "core-site.xml"));
+			Document siteDocument = reader.read(new File(hadoopConfDir, "hdfs-site.xml"));
+
+			Element coreRootElement = coreDocument.getRootElement();
+			Iterator coreIterator = coreRootElement.elementIterator();
+			while (coreIterator.hasNext()) {
+				Element element = (Element) coreIterator.next();
+				String name = element.element("name").getTextTrim();
+				String value = element.element("value").getTextTrim();
+				confMap.put(name, value);
+			}
+
+			Element siteRootElement = siteDocument.getRootElement();
+			Iterator siteIterator = siteRootElement.elementIterator();
+			while (siteIterator.hasNext()) {
+				Element element = (Element) siteIterator.next();
+				String name = element.element("name").getTextTrim();
+				String value = element.element("value").getTextTrim();
+				confMap.put(name, value);
+			}
+			ObjectMapper objectMapper = new ObjectMapper();
+			String hadoopConfString = objectMapper.writeValueAsString(confMap);
+			configuration.setString(KubernetesConfigOptions.HADOOP_CONF_STRING, hadoopConfString);
+		} catch (Exception e) {
+			LOG.error("", e);
+			throw new RuntimeException(e.getMessage());
+		}
+	}
+
 	public Configuration getEffectiveConfiguration(String[] args) throws CliArgsException {
 		final CommandLine commandLine = cli.parseCommandLineOptions(args, true);
 		final Configuration effectiveConfiguration = cli.applyCommandLineOptionsToConfiguration(commandLine);
 		effectiveConfiguration.set(DeploymentOptions.TARGET, KubernetesSessionClusterExecutor.NAME);
+		String hadoopConfDir = System.getenv(ConfigConstants.ENV_HADOOP_CONF_DIR);
+		if (hadoopConfDir != null) {
+			LOG.info("Find HADOOP_CONF_DIR: {} from env", hadoopConfDir);
+			addHadoopConf(hadoopConfDir, effectiveConfiguration);
+		}
 		return effectiveConfiguration;
 	}
 

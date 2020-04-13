@@ -238,6 +238,23 @@ public class KubernetesUtils {
 	/**
 	 * Get config map volume for job manager and task manager pod.
 	 *
+	 * @return Volume mount list.
+	 */
+	public static Volume getHadoopConfigMapVolume(String clusterId) {
+		Volume configMapVolume = new Volume();
+		configMapVolume.setName("hadoop-config-volume");
+		List<KeyToPath> items = new ArrayList();
+		items.add(new KeyToPath("core-site.xml", (Integer) null, "core-site.xml"));
+		configMapVolume.setConfigMap(new ConfigMapVolumeSourceBuilder()
+			.withName(CONFIG_MAP_PREFIX + clusterId)
+			.withItems(items)
+			.build());
+		return configMapVolume;
+	}
+
+	/**
+	 * Get config map volume for job manager and task manager pod.
+	 *
 	 * @param flinkConfDirInPod Flink conf directory that will be mounted in the pod.
 	 * @param hasLogback Uses logback?
 	 * @param hasLog4j Uses log4j?
@@ -268,6 +285,51 @@ public class KubernetesUtils {
 
 		return volumeMounts;
 	}
+
+	/**
+	 * Get config map volume for job manager and task manager pod.
+	 *
+	 * @param flinkConfig Flink Configuration.
+	 * @param hasLogback Uses logback?
+	 * @param hasLog4j Uses log4j?
+	 * @return Volume mount list.
+	 */
+	public static List<VolumeMount> getConfigMapVolumeMount(Configuration flinkConfig, boolean hasLogback, boolean hasLog4j) {
+		final String flinkConfDirInPod = flinkConfig.getString(KubernetesConfigOptions.FLINK_CONF_DIR);
+		final String hadoopConfDirInPod = flinkConfig.getString(KubernetesConfigOptions.HADOOP_CONF_DIR);
+
+		final List<VolumeMount> volumeMounts = new ArrayList<>();
+		volumeMounts.add(new VolumeMountBuilder()
+			.withName(FLINK_CONF_VOLUME)
+			.withMountPath(new File(flinkConfDirInPod, FLINK_CONF_FILENAME).getPath())
+			.withSubPath(FLINK_CONF_FILENAME).build());
+
+		if (flinkConfig.contains(KubernetesConfigOptions.HADOOP_CONF_STRING)) {
+			volumeMounts.add(new VolumeMountBuilder()
+			.withName("hadoop-config-volume")
+			.withMountPath(new File(hadoopConfDirInPod, "core-site.xml").getPath())
+			.withSubPath("core-site.xml").build());
+		}
+
+		if (hasLogback) {
+			volumeMounts.add(new VolumeMountBuilder()
+				.withName(FLINK_CONF_VOLUME)
+				.withMountPath(new File(flinkConfDirInPod, CONFIG_FILE_LOGBACK_NAME).getPath())
+				.withSubPath(CONFIG_FILE_LOGBACK_NAME)
+				.build());
+		}
+
+		if (hasLog4j) {
+			volumeMounts.add(new VolumeMountBuilder()
+				.withName(FLINK_CONF_VOLUME)
+				.withMountPath(new File(flinkConfDirInPod, CONFIG_FILE_LOG4J_NAME).getPath())
+				.withSubPath(CONFIG_FILE_LOG4J_NAME)
+				.build());
+		}
+
+		return volumeMounts;
+	}
+
 
 	/**
 	 * Get resource requirements from memory and cpu.

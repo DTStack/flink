@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ConfigMapDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.Decorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.FlinkMasterDeploymentDecorator;
+import org.apache.flink.kubernetes.kubeclient.decorators.HadoopConfigMapDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.InitializerDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.OwnerReferenceDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.ServiceDecorator;
@@ -96,6 +97,9 @@ public class Fabric8FlinkKubeClient implements FlinkKubeClient {
 		this.configMapDecorators.add(new InitializerDecorator<>(Constants.CONFIG_MAP_PREFIX + clusterId));
 		this.configMapDecorators.add(new OwnerReferenceDecorator<>());
 		this.configMapDecorators.add(new ConfigMapDecorator());
+		if (this.flinkConfig.contains(KubernetesConfigOptions.HADOOP_CONF_STRING)) {
+			this.configMapDecorators.add(new HadoopConfigMapDecorator());
+		}
 
 		this.internalServiceDecorators.add(new InitializerDecorator<>(clusterId));
 		this.internalServiceDecorators.add(new ServiceDecorator(
