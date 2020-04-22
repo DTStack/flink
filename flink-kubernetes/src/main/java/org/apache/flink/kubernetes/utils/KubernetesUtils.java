@@ -18,6 +18,7 @@
 
 package org.apache.flink.kubernetes.utils;
 
+import io.fabric8.kubernetes.api.model.*;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
@@ -28,14 +29,6 @@ import org.apache.flink.runtime.clusterframework.TaskExecutorProcessSpec;
 import org.apache.flink.runtime.clusterframework.TaskExecutorProcessUtils;
 import org.apache.flink.util.FlinkRuntimeException;
 
-import io.fabric8.kubernetes.api.model.ConfigMapVolumeSourceBuilder;
-import io.fabric8.kubernetes.api.model.KeyToPath;
-import io.fabric8.kubernetes.api.model.Quantity;
-import io.fabric8.kubernetes.api.model.ResourceRequirements;
-import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
-import io.fabric8.kubernetes.api.model.Volume;
-import io.fabric8.kubernetes.api.model.VolumeMount;
-import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,10 +40,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static org.apache.flink.configuration.GlobalConfiguration.FLINK_CONF_FILENAME;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
@@ -330,6 +320,21 @@ public class KubernetesUtils {
 		return volumeMounts;
 	}
 
+	/**
+	 * Get imagePullSecrets for job manager and task manager pod.
+	 *
+	 * @param flinkConfig Flink Configuration.
+	 * @return LocalObjectReference list.
+	 */
+	public static List<LocalObjectReference> getImagePullSecrets(Configuration flinkConfig) {
+		List<LocalObjectReference> imagePullSecrets = new ArrayList<>();
+		if (flinkConfig.contains(KubernetesConfigOptions.CONTAINER_IMAGE_PULL_SECRETS)) {
+			String secrets = flinkConfig.getString(KubernetesConfigOptions.CONTAINER_IMAGE_PULL_SECRETS);
+			Arrays.stream(secrets.split(",")).map(secret -> imagePullSecrets
+				.add(new LocalObjectReferenceBuilder().withName(secret.trim()).build()));
+		}
+		return imagePullSecrets;
+	}
 
 	/**
 	 * Get resource requirements from memory and cpu.
