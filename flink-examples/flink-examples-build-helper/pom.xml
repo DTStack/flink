@@ -24,7 +24,7 @@ under the License.
 	<parent>
 		<artifactId>flink-examples</artifactId>
 		<groupId>org.apache.flink</groupId>
-		<version>dt-release-1.8.4</version>
+		<version>dt-release-1.8.3</version>
 		<relativePath>..</relativePath>
 	</parent>
 
