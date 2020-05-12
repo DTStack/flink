@@ -1,3 +1,21 @@
+<!--
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing,
+software distributed under the License is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, either express or implied.  See the License for the
+specific language governing permissions and limitations
+under the License.
+-->
 
 #### 支持访问hdfs
 1. org.apache.flink.configuration.ConfigConstants：（ConfigConstants.java: 2021） 增加属性ENV_HADOOP_CONF_DIR，用于获取HADOOP_CONF_DIR环境变量名
@@ -16,3 +34,8 @@
 
 附：本次功能github committed：https://github.com/DTStack/flink/commit/190eac9660ebc94eca57d931e90bab037c00e773
 
+#### 增加kubernetes.container.image.pull-secrets配置参数，支持拉取私有仓库镜像
+1. org.apache.flink.kubernetes.configuration.KubernetesConfigOptions: (KubernetesConfigOptions.java: 66~71) 增加kubernetes.container.image.pull-secret参数
+2. org.apache.flink.kubernetes.kubeclient.decorators.FlinkMasterDeploymentDecorator: (FlinkMasterDeploymentDecorator.java: 104) 创建podSpec的时候增加withImagePullSecrets
+3. org.apache.flink.kubernetes.kubeclient.decorators.TaskManagerPodDecorator: (TaskManagerPodDecorator.java: 86) 创建podSpec的时候增加withImagePullSecrets
+4. org.apache.flink.kubernetes.utils.KubernetesUtils: (KubernetesUtils.java: 324~340) 实现getImagePullSecrets方法，用来获取imagePullSecrets
