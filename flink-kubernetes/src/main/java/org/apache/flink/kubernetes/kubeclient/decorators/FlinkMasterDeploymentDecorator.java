@@ -19,6 +19,7 @@
 package org.apache.flink.kubernetes.kubeclient.decorators;
 
 import io.fabric8.kubernetes.api.model.*;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import org.apache.flink.client.cli.CliFrontend;
 import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.configuration.BlobServerOptions;
@@ -58,8 +59,11 @@ public class FlinkMasterDeploymentDecorator extends Decorator<Deployment, Kubern
 
 	private final ClusterSpecification clusterSpecification;
 
-	public FlinkMasterDeploymentDecorator(ClusterSpecification clusterSpecification) {
+	private final KubernetesClient internalClient;
+
+	public FlinkMasterDeploymentDecorator(ClusterSpecification clusterSpecification, KubernetesClient internalClient) {
 		this.clusterSpecification = clusterSpecification;
+		this.internalClient = internalClient;
 	}
 
 	@Override
@@ -73,9 +77,12 @@ public class FlinkMasterDeploymentDecorator extends Decorator<Deployment, Kubern
 		final String mainClass = flinkConfig.getString(KubernetesConfigOptionsInternal.ENTRY_POINT_CLASS);
 		checkNotNull(mainClass, "Main class must be specified!");
 
-		final String confDir = CliFrontend.getConfigurationDirectoryFromEnv();
-		final boolean hasLogback = new File(confDir, Constants.CONFIG_FILE_LOGBACK_NAME).exists();
-		final boolean hasLog4j = new File(confDir, Constants.CONFIG_FILE_LOG4J_NAME).exists();
+		final String namespace = flinkConfig.getString(KubernetesConfigOptions.NAMESPACE);
+		String configMapName = Constants.CONFIG_MAP_PREFIX + clusterId;
+		ConfigMap flinkConfigMap = this.internalClient.configMaps().inNamespace(namespace).withName(configMapName).get();
+
+		final boolean hasLogback = flinkConfigMap.getData().containsKey(Constants.CONFIG_FILE_LOGBACK_NAME);
+		final boolean hasLog4j = flinkConfigMap.getData().containsKey(Constants.CONFIG_FILE_LOG4J_NAME);
 
 		final Map<String, String> labels = new LabelBuilder()
 			.withExist(deployment.getMetadata().getLabels())
@@ -113,11 +120,11 @@ public class FlinkMasterDeploymentDecorator extends Decorator<Deployment, Kubern
 	}
 
 	private Container createJobManagerContainer(
-			Configuration flinkConfig,
-			String mainClass,
-			boolean hasLogback,
-			boolean hasLog4j,
-			int blobServerPort) {
+		Configuration flinkConfig,
+		String mainClass,
+		boolean hasLogback,
+		boolean hasLog4j,
+		int blobServerPort) {
 		final String flinkConfDirInPod = flinkConfig.getString(KubernetesConfigOptions.FLINK_CONF_DIR);
 		final String logDirInPod = flinkConfig.getString(KubernetesConfigOptions.FLINK_LOG_DIR);
 		final String startCommand = KubernetesUtils.getJobManagerStartCommand(
@@ -153,9 +160,9 @@ public class FlinkMasterDeploymentDecorator extends Decorator<Deployment, Kubern
 	private List<EnvVar> buildEnvForContainer(Configuration flinkConfig) {
 		List<EnvVar> envList =
 			BootstrapTools.getEnvironmentVariables(ResourceManagerOptions.CONTAINERIZED_MASTER_ENV_PREFIX, flinkConfig)
-			.entrySet()
-			.stream()
-			.map(kv -> new EnvVar(kv.getKey(), kv.getValue(), null)).collect(Collectors.toList());
+				.entrySet()
+				.stream()
+				.map(kv -> new EnvVar(kv.getKey(), kv.getValue(), null)).collect(Collectors.toList());
 		envList.add(new EnvVarBuilder()
 			.withName(ENV_FLINK_POD_IP_ADDRESS)
 			.withValueFrom(new EnvVarSourceBuilder().withNewFieldRef(API_VERSION, POD_IP_FIELD_PATH).build())

@@ -19,6 +19,7 @@
 package org.apache.flink.kubernetes.kubeclient.decorators;
 
 import io.fabric8.kubernetes.api.model.*;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import org.apache.flink.client.cli.CliFrontend;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.TaskManagerOptions;
@@ -46,9 +47,12 @@ public class TaskManagerPodDecorator extends Decorator<Pod, KubernetesPod> {
 
 	private final TaskManagerPodParameter parameter;
 
-	public TaskManagerPodDecorator(TaskManagerPodParameter parameters) {
+	private final KubernetesClient internalClient;
+
+	public TaskManagerPodDecorator(TaskManagerPodParameter parameters, KubernetesClient internalClient) {
 		checkNotNull(parameters);
 		this.parameter = parameters;
+		this.internalClient = internalClient;
 	}
 
 	@Override
@@ -60,9 +64,12 @@ public class TaskManagerPodDecorator extends Decorator<Pod, KubernetesPod> {
 		final int taskManagerRpcPort = KubernetesUtils.parsePort(flinkConfig, TaskManagerOptions.RPC_PORT);
 		checkArgument(taskManagerRpcPort > 0, "%s should not be 0.", TaskManagerOptions.RPC_PORT.key());
 
-		final String confDir = CliFrontend.getConfigurationDirectoryFromEnv();
-		final boolean hasLogback = new File(confDir, Constants.CONFIG_FILE_LOGBACK_NAME).exists();
-		final boolean hasLog4j = new File(confDir, Constants.CONFIG_FILE_LOG4J_NAME).exists();
+		final String namespace = flinkConfig.getString(KubernetesConfigOptions.NAMESPACE);
+		String configMapName = Constants.CONFIG_MAP_PREFIX + clusterId;
+		ConfigMap flinkConfigMap = this.internalClient.configMaps().inNamespace(namespace).withName(configMapName).get();
+
+		final boolean hasLogback = flinkConfigMap.getData().containsKey(Constants.CONFIG_FILE_LOGBACK_NAME);
+		final boolean hasLog4j = flinkConfigMap.getData().containsKey(Constants.CONFIG_FILE_LOG4J_NAME);
 
 		final Map<String, String> labels = new LabelBuilder()
 			.withExist(pod.getMetadata().getLabels())

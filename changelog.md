@@ -29,7 +29,7 @@ under the License.
 9. org.apache.flink.kubernetes.kubeclient.decorators.TaskManagerPodDecorator：（TaskManagerPodDecorator.java:83~88）增加hadoopConfigMapVolume
 10. org.apache.flink.kubernetes.kubeclient.decorators.TaskManagerPodDecorator：（TaskManagerPodDecorator.java:117）getConfigMapVolumeMount第一个参数改为flinkConfig
 11. org.apache.flink.kubernetes.utils.KubernetesUtils:（KubernetesUtils.java:238~254）增加getHadoopConfigMapVolume方法
-12. org.apache.flink.kubernetes.utils.KubernetesUtils：（KubernetesUtils.java:289～333）重写getConfigMapVolumeMount方法
+12. org.apache.flink.kubernetes.utils.KubernetesUtils:（KubernetesUtils.java:289～333）重写getConfigMapVolumeMount方法
 13. flink/flink-kubernetes/pom.xml （73～78） 增加依赖dom4j：1.6.1，用于解析xml文档
 
 附：本次功能github committed：https://github.com/DTStack/flink/commit/190eac9660ebc94eca57d931e90bab037c00e773
@@ -39,3 +39,8 @@ under the License.
 2. org.apache.flink.kubernetes.kubeclient.decorators.FlinkMasterDeploymentDecorator: (FlinkMasterDeploymentDecorator.java: 104) 创建podSpec的时候增加withImagePullSecrets
 3. org.apache.flink.kubernetes.kubeclient.decorators.TaskManagerPodDecorator: (TaskManagerPodDecorator.java: 86) 创建podSpec的时候增加withImagePullSecrets
 4. org.apache.flink.kubernetes.utils.KubernetesUtils: (KubernetesUtils.java: 324~340) 实现getImagePullSecrets方法，用来获取imagePullSecrets
+
+#### 修改判断使用logback或者使用log4j的逻辑
+1. org.apache.flink.kubernetes.kubeclient.Fabric8FlinkKubeClient: (Fabric8FlinkKubeClient.java:163, 184) 为FlinkMasterDeploymentDecorator和TaskManagerPodDecorator传入 kubeClient
+2. org.apache.flink.kubernetes.kubeclient.decorators.FlinkMasterDeploymentDecorator: (FlinkMasterDeploymentDecorator.java 80~85) 修改decorateInternalResource方法中使用logback还是log4j的逻辑
+3. org.apache.flink.kubernetes.kubeclient.decorators.TaskManagerPodDecorator: (TaskManagerPodDecorator.java: 67~72) 修改decorateInternalResource方法中使用logback还是log4j的逻辑
