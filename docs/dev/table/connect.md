@@ -44,6 +44,7 @@ The following tables list all available connectors and formats. Their mutual com
 | :---------------- | :------------------ | :--------------------------- | :----------------------|
 | Filesystem        |                     | Built-in                     | Built-in               |
 | Elasticsearch     | 6                   | `flink-connector-elasticsearch6` | [Download](https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-elasticsearch6{{site.scala_version_suffix}}/{{site.version}}/flink-sql-connector-elasticsearch6{{site.scala_version_suffix}}-{{site.version}}.jar) |
+| Elasticsearch     | 7                   | `flink-connector-elasticsearch7` | [Download](https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-elasticsearch7{{site.scala_version_suffix}}/{{site.version}}/flink-sql-connector-elasticsearch7{{site.scala_version_suffix}}-{{site.version}}.jar) |
 | Apache Kafka      | 0.8                 | `flink-connector-kafka-0.8`  | Not available          |
 | Apache Kafka      | 0.9                 | `flink-connector-kafka-0.9`  | [Download](https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka-0.9{{site.scala_version_suffix}}/{{site.version}}/flink-sql-connector-kafka-0.9{{site.scala_version_suffix}}-{{site.version}}.jar) |
 | Apache Kafka      | 0.10                | `flink-connector-kafka-0.10` | [Download](https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka-0.10{{site.scala_version_suffix}}/{{site.version}}/flink-sql-connector-kafka-0.10{{site.scala_version_suffix}}-{{site.version}}.jar) |
@@ -917,11 +918,11 @@ CREATE TABLE MyUserTable (
                                               -- per bulk request
                                               -- (only MB granularity is supported)
   'connector.bulk-flush.interval' = '60000',  -- optional: bulk flush interval (in milliseconds)
-  'connector.bulk-flush.back-off.type' = '...',       -- optional: backoff strategy ("disabled" by default)
+  'connector.bulk-flush.backoff.type' = '...',       -- optional: backoff strategy ("disabled" by default)
                                                       -- valid strategies are "disabled", "constant",
                                                       -- or "exponential"
-  'connector.bulk-flush.back-off.max-retries' = '3',  -- optional: maximum number of retries
-  'connector.bulk-flush.back-off.delay' = '30000',    -- optional: delay between each backoff attempt
+  'connector.bulk-flush.backoff.max-retries' = '3',  -- optional: maximum number of retries
+  'connector.bulk-flush.backoff.delay' = '30000',    -- optional: delay between each backoff attempt
                                                       -- (in milliseconds)
 
   -- optional: connection properties to be used during REST communication to Elasticsearch

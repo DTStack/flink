@@ -127,6 +127,7 @@ import org.apache.flink.util.Preconditions;
 import org.apache.flink.shaded.netty4.io.netty.channel.ChannelInboundHandler;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.io.File;
 import java.io.IOException;
@@ -136,8 +137,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -152,7 +154,7 @@ public class WebMonitorEndpoint<T extends RestfulGateway> extends RestServerEndp
 	protected final RestHandlerConfiguration restConfiguration;
 	private final GatewayRetriever<ResourceManagerGateway> resourceManagerRetriever;
 	private final TransientBlobService transientBlobService;
-	protected final ExecutorService executor;
+	protected final ScheduledExecutorService executor;
 
 	private final ExecutionGraphCache executionGraphCache;
 	private final CheckpointStatsCache checkpointStatsCache;
@@ -167,6 +169,9 @@ public class WebMonitorEndpoint<T extends RestfulGateway> extends RestServerEndp
 
 	private final Collection<JsonArchivist> archivingHandlers = new ArrayList<>(16);
 
+	@Nullable
+	private ScheduledFuture<?> executionGraphCleanupTask;
+
 	public WebMonitorEndpoint(
 			RestServerEndpointConfiguration endpointConfiguration,
 			GatewayRetriever<? extends T> leaderRetriever,
@@ -174,9 +179,10 @@ public class WebMonitorEndpoint<T extends RestfulGateway> extends RestServerEndp
 			RestHandlerConfiguration restConfiguration,
 			GatewayRetriever<ResourceManagerGateway> resourceManagerRetriever,
 			TransientBlobService transientBlobService,
-			ExecutorService executor,
+			ScheduledExecutorService executor,
 			MetricFetcher metricFetcher,
 			LeaderElectionService leaderElectionService,
+			ExecutionGraphCache executionGraphCache,
 			FatalErrorHandler fatalErrorHandler) throws IOException {
 		super(endpointConfiguration);
 		this.leaderRetriever = Preconditions.checkNotNull(leaderRetriever);
@@ -186,9 +192,7 @@ public class WebMonitorEndpoint<T extends RestfulGateway> extends RestServerEndp
 		this.transientBlobService = Preconditions.checkNotNull(transientBlobService);
 		this.executor = Preconditions.checkNotNull(executor);
 
-		this.executionGraphCache = new ExecutionGraphCache(
-			restConfiguration.getTimeout(),
-			Time.milliseconds(restConfiguration.getRefreshInterval()));
+		this.executionGraphCache = executionGraphCache;
 
 		this.checkpointStatsCache = new CheckpointStatsCache(
 			restConfiguration.getMaxCheckpointStatisticCacheEntries());
@@ -683,13 +687,28 @@ public class WebMonitorEndpoint<T extends RestfulGateway> extends RestServerEndp
 	@Override
 	public void startInternal() throws Exception {
 		leaderElectionService.start(this);
+		startExecutionGraphCacheCleanupTask();
+
 		if (hasWebUI) {
 			log.info("Web frontend listening at {}.", getRestBaseUrl());
 		}
 	}
 
+	private void startExecutionGraphCacheCleanupTask() {
+		final long cleanupInterval = 2 * restConfiguration.getRefreshInterval();
+		executionGraphCleanupTask = executor.scheduleWithFixedDelay(
+			executionGraphCache::cleanup,
+			cleanupInterval,
+			cleanupInterval,
+			TimeUnit.MILLISECONDS);
+	}
+
 	@Override
 	protected CompletableFuture<Void> shutDownInternal() {
+		if (executionGraphCleanupTask != null) {
+			executionGraphCleanupTask.cancel(false);
+		}
+
 		executionGraphCache.close();
 
 		final CompletableFuture<Void> shutdownFuture = FutureUtils.runAfterwards(
@@ -756,7 +775,7 @@ public class WebMonitorEndpoint<T extends RestfulGateway> extends RestServerEndp
 		return archivedJson;
 	}
 
-	public static ExecutorService createExecutorService(int numThreads, int threadPriority, String componentName) {
+	public static ScheduledExecutorService createExecutorService(int numThreads, int threadPriority, String componentName) {
 		if (threadPriority < Thread.MIN_PRIORITY || threadPriority > Thread.MAX_PRIORITY) {
 			throw new IllegalArgumentException(
 				String.format(
@@ -766,7 +785,7 @@ public class WebMonitorEndpoint<T extends RestfulGateway> extends RestServerEndp
 					threadPriority));
 		}
 
-		return Executors.newFixedThreadPool(
+		return Executors.newScheduledThreadPool(
 			numThreads,
 			new ExecutorThreadFactory.Builder()
 				.setThreadPriority(threadPriority)

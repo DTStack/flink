@@ -75,6 +75,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -246,7 +247,7 @@ public class TaskManagerRunner implements FatalErrorHandler, AutoCloseableAsync 
 
 	@Override
 	public void onFatalError(Throwable exception) {
-		Throwable enrichedException = ExceptionUtils.enrichTaskManagerOutOfMemoryError(exception);
+		Throwable enrichedException = ExceptionUtils.tryEnrichTaskManagerError(exception);
 		LOG.error("Fatal error occurred while executing the TaskManager. Shutting it down...", enrichedException);
 
 		// In case of the Metaspace OutOfMemoryError, we expect that the graceful shutdown is possible,
@@ -373,10 +374,14 @@ public class TaskManagerRunner implements FatalErrorHandler, AutoCloseableAsync 
 			resourceID,
 			taskManagerServicesConfiguration.getSystemResourceMetricsProbingInterval());
 
+		final ExecutorService ioExecutor = Executors.newFixedThreadPool(
+			taskManagerServicesConfiguration.getNumIoThreads(),
+			new ExecutorThreadFactory("flink-taskexecutor-io"));
+
 		TaskManagerServices taskManagerServices = TaskManagerServices.fromConfiguration(
 			taskManagerServicesConfiguration,
 			taskManagerMetricGroup.f1,
-			rpcService.getExecutor()); // TODO replace this later with some dedicated executor for io.
+			ioExecutor);
 
 		TaskManagerConfiguration taskManagerConfiguration =
 			TaskManagerConfiguration.fromConfiguration(configuration, taskExecutorResourceSpec);
