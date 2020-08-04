@@ -29,7 +29,7 @@ import java.io.InputStream;
 /**
  * No-op implementation of {@link TransientBlobService} used by the {@link RestAPIDocGenerator}.
  */
-enum NoOpTransientBlobService implements TransientBlobService {
+public enum NoOpTransientBlobService implements TransientBlobService {
 	INSTANCE;
 
 	@Override

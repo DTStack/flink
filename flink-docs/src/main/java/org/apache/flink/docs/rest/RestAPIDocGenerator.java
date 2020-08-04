@@ -349,9 +349,10 @@ public class RestAPIDocGenerator {
 				handlerConfig,
 				resourceManagerGatewayRetriever,
 				NoOpTransientBlobService.INSTANCE,
-				Executors.newFixedThreadPool(1),
+				Executors.newScheduledThreadPool(1),
 				VoidMetricFetcher.INSTANCE,
 				NoOpElectionService.INSTANCE,
+				NoOpExecutionGraphCache.INSTANCE,
 				NoOpFatalErrorHandler.INSTANCE);
 		}
 
