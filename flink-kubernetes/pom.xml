@@ -32,7 +32,7 @@ under the License.
 	<packaging>jar</packaging>
 
 	<properties>
-		<kubernetes.client.version>4.5.2</kubernetes.client.version>
+		<kubernetes.client.version>4.11.0</kubernetes.client.version>
 	</properties>
 
 	<!-- Set dependency version for transitive dependencies -->
