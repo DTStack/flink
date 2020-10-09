@@ -64,4 +64,14 @@ public class Constants {
 	public static final String ENV_FLINK_POD_IP_ADDRESS = "_POD_IP_ADDRESS";
 
 	public static final String POD_IP_FIELD_PATH = "status.podIP";
+
+	public static final String KUBERNETES_JOB_MANAGER_VOLUMES_PREFIX = "kubernetes.jobmanager.volumes.";
+
+	public static final String KUBERNETES_TASK_MANAGER_VOLUMES_PREFIX = "kubernetes.taskmanager.volumes.";
+
+	public static final String VOLUME_TYPE_KEY = "volumeType";
+
+	public static final String VOLUME_OPTIONS_KEY = "options";
+
+	public static final String VOLUME_MOUNT_KEY = "mount";
 }

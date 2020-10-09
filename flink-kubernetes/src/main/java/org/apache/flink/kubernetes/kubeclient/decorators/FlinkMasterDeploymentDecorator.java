@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.kubeclient.decorators;
 
 import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.flink.client.cli.CliFrontend;
 import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.configuration.BlobServerOptions;
@@ -100,6 +101,11 @@ public class FlinkMasterDeploymentDecorator extends Decorator<Deployment, Kubern
 			volumes.add(hadoopConfigMapVolume);
 		}
 
+		List<Volume> customVolumes = KubernetesUtils.parseVolumesWithPrefix(Constants.KUBERNETES_JOB_MANAGER_VOLUMES_PREFIX, flinkConfig, volumes);
+		if (CollectionUtils.isNotEmpty(customVolumes)) {
+			volumes.addAll(customVolumes);
+		}
+
 		final Container container = createJobManagerContainer(flinkConfig, mainClass, hasLogback, hasLog4j, blobServerPort);
 
 		final String serviceAccount = flinkConfig.getString(KubernetesConfigOptions.JOB_MANAGER_SERVICE_ACCOUNT);
@@ -141,6 +147,15 @@ public class FlinkMasterDeploymentDecorator extends Decorator<Deployment, Kubern
 			clusterSpecification.getMasterMemoryMB(),
 			flinkConfig.getDouble(KubernetesConfigOptions.JOB_MANAGER_CPU));
 
+		List<VolumeMount> volumeMounts = new ArrayList();
+		List<VolumeMount> configMapVolumeMounts = KubernetesUtils.getConfigMapVolumeMount(flinkConfig, hasLogback, hasLog4j);
+		volumeMounts.addAll(configMapVolumeMounts);
+
+		List<VolumeMount> customVolumeMounts = KubernetesUtils.parseVolumeMountsWithPrefix(Constants.KUBERNETES_JOB_MANAGER_VOLUMES_PREFIX, flinkConfig, volumeMounts);
+		if (CollectionUtils.isNotEmpty(customVolumeMounts)) {
+			volumeMounts.addAll(customVolumeMounts);
+		}
+
 		return new ContainerBuilder()
 			.withName(CONTAINER_NAME)
 			.withCommand(flinkConfig.getString(KubernetesConfigOptions.KUBERNETES_ENTRY_PATH))
@@ -153,7 +168,7 @@ public class FlinkMasterDeploymentDecorator extends Decorator<Deployment, Kubern
 				new ContainerPortBuilder().withContainerPort(flinkConfig.getInteger(JobManagerOptions.PORT)).build(),
 				new ContainerPortBuilder().withContainerPort(blobServerPort).build()))
 			.withEnv(buildEnvForContainer(flinkConfig))
-			.withVolumeMounts(KubernetesUtils.getConfigMapVolumeMount(flinkConfig, hasLogback, hasLog4j))
+			.withVolumeMounts(volumeMounts)
 			.build();
 	}
 

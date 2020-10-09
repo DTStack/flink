@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.kubeclient.decorators;
 
 import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.flink.client.cli.CliFrontend;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.TaskManagerOptions;
@@ -87,6 +88,11 @@ public class TaskManagerPodDecorator extends Decorator<Pod, KubernetesPod> {
 			volumes.add(hadoopConfigMapVolume);
 		}
 
+		List<Volume> customVolumes = KubernetesUtils.parseVolumesWithPrefix(Constants.KUBERNETES_TASK_MANAGER_VOLUMES_PREFIX, flinkConfig, volumes);
+		if (CollectionUtils.isNotEmpty(customVolumes)) {
+			volumes.addAll(customVolumes);
+		}
+
 		pod.setSpec(new PodSpecBuilder()
 			.withVolumes(volumes)
 			.withContainers(createTaskManagerContainer(flinkConfig, hasLogback, hasLog4j, taskManagerRpcPort))
@@ -100,6 +106,15 @@ public class TaskManagerPodDecorator extends Decorator<Pod, KubernetesPod> {
 			boolean hasLogBack,
 			boolean hasLog4j,
 			int taskManagerRpcPort) {
+
+		List<VolumeMount> volumeMounts = new ArrayList();
+		List<VolumeMount> configMapVolumeMounts = KubernetesUtils.getConfigMapVolumeMount(flinkConfig, hasLogBack, hasLog4j);
+		volumeMounts.addAll(configMapVolumeMounts);
+
+		List<VolumeMount> customVolumeMounts = KubernetesUtils.parseVolumeMountsWithPrefix(Constants.KUBERNETES_TASK_MANAGER_VOLUMES_PREFIX, flinkConfig, volumeMounts);
+		if (CollectionUtils.isNotEmpty(customVolumeMounts)) {
+			volumeMounts.addAll(customVolumeMounts);
+		}
 		return new ContainerBuilder()
 			.withName(CONTAINER_NAME)
 			.withCommand(flinkConfig.getString(KubernetesConfigOptions.KUBERNETES_ENTRY_PATH))
