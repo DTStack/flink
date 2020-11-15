@@ -74,4 +74,6 @@ public class Constants {
 	public static final String VOLUME_OPTIONS_KEY = "options";
 
 	public static final String VOLUME_MOUNT_KEY = "mount";
+
+	public static final String VOLUME_MOUNT_NAME_KEY = "name";
 }

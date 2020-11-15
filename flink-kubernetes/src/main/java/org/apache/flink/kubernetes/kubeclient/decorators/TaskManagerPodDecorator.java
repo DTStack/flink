@@ -130,7 +130,7 @@ public class TaskManagerPodDecorator extends Decorator<Pod, KubernetesPod> {
 				.stream()
 				.map(kv -> new EnvVar(kv.getKey(), kv.getValue(), null))
 				.collect(Collectors.toList()))
-			.withVolumeMounts(KubernetesUtils.getConfigMapVolumeMount(flinkConfig, hasLogBack, hasLog4j))
+			.withVolumeMounts(volumeMounts)
 			.build();
 	}
 }

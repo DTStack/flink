@@ -436,7 +436,9 @@ public class KubernetesUtils {
 				String optionName = contents[6];
 				ConfigOption configOption = ConfigOptions.key(key).stringType().noDefaultValue();
 				String optionValue = flinkConfig.getString(configOption);
-				Map<String, String> volumeInfo = volumeMountSources.computeIfAbsent(volumeName, k -> new HashMap());
+				Map<String, String> volumeInfo = volumeMountSources.computeIfAbsent(volumeName, k -> new HashMap(){{
+					put(Constants.VOLUME_MOUNT_NAME_KEY, volumeName);
+				}});
 				volumeInfo.put(optionName, optionValue);
 			}
 		}
