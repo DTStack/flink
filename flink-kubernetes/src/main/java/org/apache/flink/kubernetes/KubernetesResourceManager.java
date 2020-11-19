@@ -18,6 +18,8 @@
 
 package org.apache.flink.kubernetes;
 
+import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
@@ -63,6 +65,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
+import static java.net.HttpURLConnection.HTTP_GONE;
 
 /**
  * Kubernetes specific implementation of the {@link ResourceManager}.
@@ -151,6 +155,11 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 		podsWatch = kubeClient.watchPodsAndDoCallback(getTaskManagerLabels(), this);
 	}
 
+	private void reWatchPods() {
+		LOG.info("Reset pods watch!");
+		podsWatch = kubeClient.watchPodsAndDoCallback(getTaskManagerLabels(), this);
+	}
+
 	@Override
 	public CompletableFuture<Void> onStop() {
 		// shut down all components
@@ -236,7 +245,17 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 
 	@Override
 	public void handleFatalError(Throwable throwable) {
-		onFatalError(throwable);
+		if (!(throwable instanceof KubernetesClientException)){
+			onFatalError(throwable);
+		}
+		KubernetesClientException status = (KubernetesClientException) throwable;
+		if (status != null && status.getCode() == HTTP_GONE) {
+			log.warn("WatchConnectionManager error in ResourceManager.", throwable);
+			reWatchPods();
+		} else {
+			onFatalError(throwable);
+		}
+
 	}
 
 	@VisibleForTesting
