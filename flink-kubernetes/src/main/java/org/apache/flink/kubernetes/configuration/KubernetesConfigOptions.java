@@ -63,6 +63,13 @@ public class KubernetesConfigOptions {
 		.withDescription("Kubernetes image pull policy. Valid values are Always, Never, and IfNotPresent. " +
 			"The default policy is IfNotPresent to avoid putting pressure to image repository.");
 
+	public static final ConfigOption<String> CONTAINER_IMAGE_PULL_SECRETS =
+		key("kubernetes.container.image.pull-secrets")
+		.stringType()
+		.noDefaultValue()
+		.withDescription("Kubernetes image pull secrets. Comma separated list of the Kubernetes secrets used " +
+			"to access private image registries.");
+
 	public static final ConfigOption<String> KUBE_CONFIG_FILE =
 		key("kubernetes.config.file")
 		.stringType()
@@ -122,6 +129,20 @@ public class KubernetesConfigOptions {
 		.defaultValue("/opt/flink/conf")
 		.withDescription("The flink conf directory that will be mounted in pod. The flink-conf.yaml, log4j.properties, " +
 			"logback.xml in this path will be overwritten from config map.");
+
+	public static final ConfigOption<String> HADOOP_CONF_DIR =
+		key("kubernetes.hadoop.conf.dir")
+		.stringType()
+		.defaultValue("/opt/hadoop/etc/hadoop")
+		.withDescription("The hadoop conf directory that will be mounted in pod. The core-site.xml" +
+			"in this path will be overwritten from config map.");
+
+	public static final ConfigOption<String> HADOOP_CONF_STRING =
+		key("hadoop.conf.string")
+		.stringType()
+		.defaultValue(null)
+		.withDescription("The hadoop conf content that will be mounted in pod");
+
 
 	public static final ConfigOption<String> FLINK_LOG_DIR =
 		key("kubernetes.flink.log.dir")

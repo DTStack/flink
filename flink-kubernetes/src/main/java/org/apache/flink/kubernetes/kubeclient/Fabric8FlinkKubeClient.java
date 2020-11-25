@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ConfigMapDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.Decorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.FlinkMasterDeploymentDecorator;
+import org.apache.flink.kubernetes.kubeclient.decorators.HadoopConfigMapDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.InitializerDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.OwnerReferenceDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.ServiceDecorator;
@@ -34,7 +35,9 @@ import org.apache.flink.kubernetes.kubeclient.resources.ActionWatcher;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesConfigMap;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesDeployment;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesPod;
+import org.apache.flink.kubernetes.kubeclient.resources.KubernetesPodsWatcher;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesService;
+import org.apache.flink.kubernetes.kubeclient.resources.KubernetesWatch;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.util.ExecutorUtils;
 import org.apache.flink.util.TimeUtils;
@@ -47,7 +50,6 @@ import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.ServicePort;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.Watch;
 import io.fabric8.kubernetes.client.Watcher;
 import org.slf4j.Logger;
@@ -55,7 +57,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -106,6 +107,9 @@ public class Fabric8FlinkKubeClient implements FlinkKubeClient {
 		this.configMapDecorators.add(new InitializerDecorator<>(Constants.CONFIG_MAP_PREFIX + clusterId));
 		this.configMapDecorators.add(new OwnerReferenceDecorator<>());
 		this.configMapDecorators.add(new ConfigMapDecorator());
+		if (this.flinkConfig.contains(KubernetesConfigOptions.HADOOP_CONF_STRING)) {
+			this.configMapDecorators.add(new HadoopConfigMapDecorator());
+		}
 
 		this.internalServiceDecorators.add(new InitializerDecorator<>(clusterId));
 		this.internalServiceDecorators.add(new ServiceDecorator(
@@ -156,7 +160,7 @@ public class Fabric8FlinkKubeClient implements FlinkKubeClient {
 			deployment = d.decorate(deployment);
 		}
 
-		deployment = new FlinkMasterDeploymentDecorator(clusterSpecification).decorate(deployment);
+		deployment = new FlinkMasterDeploymentDecorator(clusterSpecification, internalClient).decorate(deployment);
 
 		LOG.debug("Create Flink Master deployment with spec: {}", deployment.getInternalResource().getSpec());
 
@@ -177,7 +181,7 @@ public class Fabric8FlinkKubeClient implements FlinkKubeClient {
 					pod = d.decorate(pod);
 				}
 
-				pod = new TaskManagerPodDecorator(parameter).decorate(pod);
+				pod = new TaskManagerPodDecorator(parameter, internalClient).decorate(pod);
 
 				LOG.debug("Create TaskManager pod with spec: {}", pod.getInternalResource().getSpec());
 
@@ -241,36 +245,12 @@ public class Fabric8FlinkKubeClient implements FlinkKubeClient {
 	}
 
 	@Override
-	public void watchPodsAndDoCallback(Map<String, String> labels, PodCallbackHandler callbackHandler) {
-		final Watcher<Pod> watcher = new Watcher<Pod>() {
-			@Override
-			public void eventReceived(Action action, Pod pod) {
-				LOG.debug("Received {} event for pod {}, details: {}", action, pod.getMetadata().getName(), pod.getStatus());
-				switch (action) {
-					case ADDED:
-						callbackHandler.onAdded(Collections.singletonList(new KubernetesPod(flinkConfig, pod)));
-						break;
-					case MODIFIED:
-						callbackHandler.onModified(Collections.singletonList(new KubernetesPod(flinkConfig, pod)));
-						break;
-					case ERROR:
-						callbackHandler.onError(Collections.singletonList(new KubernetesPod(flinkConfig, pod)));
-						break;
-					case DELETED:
-						callbackHandler.onDeleted(Collections.singletonList(new KubernetesPod(flinkConfig, pod)));
-						break;
-					default:
-						LOG.debug("Ignore handling {} event for pod {}", action, pod.getMetadata().getName());
-						break;
-				}
-			}
-
-			@Override
-			public void onClose(KubernetesClientException e) {
-				LOG.error("The pods watcher is closing.", e);
-			}
-		};
-		this.internalClient.pods().withLabels(labels).watch(watcher);
+	public KubernetesWatch watchPodsAndDoCallback(Map<String, String> labels, PodCallbackHandler podCallbackHandler) {
+		return new KubernetesWatch(
+			flinkConfig,
+			this.internalClient.pods()
+				.withLabels(labels)
+				.watch(new KubernetesPodsWatcher(flinkConfig, podCallbackHandler)));
 	}
 
 	@Override

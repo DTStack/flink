@@ -187,7 +187,7 @@ public class StreamExecutionEnvironment {
 	 */
 	@PublicEvolving
 	public StreamExecutionEnvironment(final Configuration configuration) {
-		this(DefaultExecutorServiceLoader.INSTANCE, configuration, null);
+		this(new DefaultExecutorServiceLoader(), configuration, null);
 	}
 
 	/**
@@ -234,6 +234,13 @@ public class StreamExecutionEnvironment {
 	*/
 	public List<Tuple2<String, DistributedCache.DistributedCacheEntry>> getCachedFiles() {
 		return cacheFile;
+	}
+
+	/**
+	 * Gets the config JobListeners.
+	 */
+	protected List<JobListener> getJobListeners() {
+		return jobListeners;
 	}
 
 	/**
@@ -1566,7 +1573,7 @@ public class StreamExecutionEnvironment {
 	@SuppressWarnings("unchecked")
 	public <OUT> DataStreamSource<OUT> addSource(SourceFunction<OUT> function, String sourceName, TypeInformation<OUT> typeInfo) {
 
-		if (function instanceof ResultTypeQueryable) {
+		if (typeInfo == null && function instanceof ResultTypeQueryable) {
 			typeInfo = ((ResultTypeQueryable<OUT>) function).getProducedType();
 		}
 		if (typeInfo == null) {

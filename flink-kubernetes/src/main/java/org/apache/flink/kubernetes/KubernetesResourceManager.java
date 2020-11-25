@@ -18,6 +18,8 @@
 
 package org.apache.flink.kubernetes;
 
+import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
@@ -26,6 +28,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesResourceManagerConfig
 import org.apache.flink.kubernetes.kubeclient.FlinkKubeClient;
 import org.apache.flink.kubernetes.kubeclient.TaskManagerPodParameter;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesPod;
+import org.apache.flink.kubernetes.kubeclient.resources.KubernetesWatch;
 import org.apache.flink.kubernetes.taskmanager.KubernetesTaskExecutorRunner;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
@@ -47,6 +50,7 @@ import org.apache.flink.runtime.resourcemanager.exceptions.ResourceManagerExcept
 import org.apache.flink.runtime.resourcemanager.slotmanager.SlotManager;
 import org.apache.flink.runtime.rpc.FatalErrorHandler;
 import org.apache.flink.runtime.rpc.RpcService;
+import org.apache.flink.util.ExceptionUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,6 +65,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
+import static java.net.HttpURLConnection.HTTP_GONE;
 
 /**
  * Kubernetes specific implementation of the {@link ResourceManager}.
@@ -95,6 +101,8 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 
 	/** The number of pods requested, but not yet granted. */
 	private int numPendingPodRequests = 0;
+
+	private KubernetesWatch podsWatch;
 
 	public KubernetesResourceManager(
 			RpcService rpcService,
@@ -144,21 +152,32 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 	protected void initialize() throws ResourceManagerException {
 		recoverWorkerNodesFromPreviousAttempts();
 
-		kubeClient.watchPodsAndDoCallback(getTaskManagerLabels(), this);
+		podsWatch = kubeClient.watchPodsAndDoCallback(getTaskManagerLabels(), this);
+	}
+
+	private void reWatchPods() {
+		LOG.info("Reset pods watch!");
+		podsWatch = kubeClient.watchPodsAndDoCallback(getTaskManagerLabels(), this);
 	}
 
 	@Override
 	public CompletableFuture<Void> onStop() {
 		// shut down all components
-		Throwable exception = null;
+		Throwable throwable = null;
+
+		try {
+			podsWatch.close();
+		} catch (Throwable t) {
+			throwable = t;
+		}
 
 		try {
 			kubeClient.close();
 		} catch (Throwable t) {
-			exception = t;
+			throwable = ExceptionUtils.firstOrSuppressed(t, throwable);
 		}
 
-		return getStopTerminationFutureOrCompletedExceptionally(exception);
+		return getStopTerminationFutureOrCompletedExceptionally(throwable);
 	}
 
 	@Override
@@ -222,6 +241,21 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 	@Override
 	public void onError(List<KubernetesPod> pods) {
 		runAsync(() -> pods.forEach(this::removePodIfTerminated));
+	}
+
+	@Override
+	public void handleFatalError(Throwable throwable) {
+		if (!(throwable instanceof KubernetesClientException)){
+			onFatalError(throwable);
+		}
+		KubernetesClientException status = (KubernetesClientException) throwable;
+		if (status != null && status.getCode() == HTTP_GONE) {
+			log.warn("WatchConnectionManager error in ResourceManager.", throwable);
+			reWatchPods();
+		} else {
+			onFatalError(throwable);
+		}
+
 	}
 
 	@VisibleForTesting

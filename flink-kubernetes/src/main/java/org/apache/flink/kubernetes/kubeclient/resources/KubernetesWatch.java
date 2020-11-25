@@ -16,36 +16,22 @@
  * limitations under the License.
  */
 
-package org.apache.flink.state.api.runtime;
+package org.apache.flink.kubernetes.kubeclient.resources;
 
-import org.apache.flink.annotation.Internal;
-import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.api.CheckpointingMode;
-import org.apache.flink.streaming.api.graph.StreamConfig;
+
+import io.fabric8.kubernetes.client.Watch;
 
 /**
- * A {@link StreamConfig} with default settings.
+ * Watch resource in Kubernetes.
  */
-@Internal
-public class BoundedStreamConfig extends StreamConfig {
+public class KubernetesWatch extends KubernetesResource<Watch> {
 
-	private static final long serialVersionUID = 1L;
-
-	public BoundedStreamConfig() {
-		super(new Configuration());
-
-		setChainStart();
-		setCheckpointingEnabled(true);
-		setCheckpointMode(CheckpointingMode.EXACTLY_ONCE);
+	public KubernetesWatch(Configuration configuration, Watch watch) {
+		super(configuration, watch);
 	}
 
-	public <IN> BoundedStreamConfig(TypeSerializer<?> keySerializer, KeySelector<IN, ?> keySelector) {
-		this();
-
-		setStateKeySerializer(keySerializer);
-		setStatePartitioner(0, keySelector);
+	public void close() {
+		getInternalResource().close();
 	}
 }
-
