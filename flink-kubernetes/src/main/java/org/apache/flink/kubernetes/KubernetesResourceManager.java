@@ -18,6 +18,8 @@
 
 package org.apache.flink.kubernetes;
 
+import io.fabric8.kubernetes.client.KubernetesClientException;
+
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
@@ -62,6 +64,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
+import static java.net.HttpURLConnection.HTTP_GONE;
 
 /**
  * Kubernetes specific implementation of the {@link ResourceManager}.
@@ -135,6 +139,13 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 	protected void initialize() throws ResourceManagerException {
 		recoverWorkerNodesFromPreviousAttempts();
 
+		podsWatch = kubeClient.watchPodsAndDoCallback(
+			KubernetesUtils.getTaskManagerLabels(clusterId),
+			this);
+	}
+
+	private void resetWatchPods() {
+		LOG.info("Reset pods watch!");
 		podsWatch = kubeClient.watchPodsAndDoCallback(
 			KubernetesUtils.getTaskManagerLabels(clusterId),
 			this);
@@ -238,6 +249,15 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 
 	@Override
 	public void handleFatalError(Throwable throwable) {
+
+		if (throwable instanceof KubernetesClientException) {
+			KubernetesClientException status = (KubernetesClientException) throwable;
+			if (status != null && status.getCode() == HTTP_GONE) {
+				log.warn("WatchConnectionManager error in ResourceManager, reset watch pods.", throwable);
+				resetWatchPods();
+				return;
+			}
+		}
 		onFatalError(throwable);
 	}
 
