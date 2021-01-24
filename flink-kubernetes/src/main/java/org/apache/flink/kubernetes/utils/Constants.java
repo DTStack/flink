@@ -80,4 +80,16 @@ public class Constants {
 	public static final int MAXIMUM_CHARACTERS_OF_CLUSTER_ID = 45;
 
 	public static final String RESTART_POLICY_OF_NEVER = "Never";
+
+	public static final String KUBERNETES_JOB_MANAGER_VOLUMES_PREFIX = "kubernetes.jobmanager.volumes.";
+
+	public static final String KUBERNETES_TASK_MANAGER_VOLUMES_PREFIX = "kubernetes.taskmanager.volumes.";
+
+	public static final String VOLUME_TYPE_KEY = "volumeType";
+
+	public static final String VOLUME_OPTIONS_KEY = "options";
+
+	public static final String VOLUME_MOUNT_KEY = "mount";
+
+	public static final String VOLUME_MOUNT_NAME_KEY = "name";
 }

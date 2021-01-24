@@ -18,8 +18,18 @@
 
 package org.apache.flink.kubernetes.utils;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.fabric8.kubernetes.api.model.ConfigMapVolumeSource;
+import io.fabric8.kubernetes.api.model.NFSVolumeSource;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSource;
+import io.fabric8.kubernetes.api.model.Volume;
+import io.fabric8.kubernetes.api.model.VolumeBuilder;
+import io.fabric8.kubernetes.api.model.VolumeMount;
+import org.apache.commons.lang3.StringUtils;
+
 import org.apache.flink.client.program.PackagedProgramUtils;
 import org.apache.flink.configuration.ConfigOption;
+import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.PipelineOptions;
@@ -38,10 +48,12 @@ import javax.annotation.Nullable;
 
 import java.io.File;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -220,6 +232,107 @@ public class KubernetesUtils {
 			}
 		}
 		return logging.toString();
+	}
+
+	public static List<VolumeMount> parseVolumeMountsWithPrefix(String prefix, Configuration flinkConfig) {
+		HashMap<String, Map<String, String>> volumeMountSources = new HashMap();
+		for (String key : flinkConfig.keySet()) {
+			if (StringUtils.startsWith(key, prefix) && StringUtils.contains(key, Constants.VOLUME_MOUNT_KEY)) {
+				String[] contents = StringUtils.split(key, ".");
+				String volumeName = contents[4];
+				String optionName = contents[6];
+				ConfigOption configOption = ConfigOptions.key(key).stringType().noDefaultValue();
+				String optionValue = flinkConfig.getString(configOption);
+				Map<String, String> volumeInfo = volumeMountSources.computeIfAbsent(volumeName, k -> new HashMap(){{
+					put(Constants.VOLUME_MOUNT_NAME_KEY, volumeName);
+				}});
+				volumeInfo.put(optionName, optionValue);
+			}
+		}
+
+		if (volumeMountSources.isEmpty()) {
+			return new ArrayList();
+		}
+
+		List<VolumeMount> customVolumeMounts = generateVolumeMounts(volumeMountSources);
+		return customVolumeMounts;
+	}
+
+	private static List<VolumeMount> generateVolumeMounts(HashMap<String, Map<String, String>> volumeMountSources) {
+		ObjectMapper objectMapper = new ObjectMapper();
+		return volumeMountSources.keySet().stream().map(volumeName -> {
+			Map<String, String> volumeMountSource = volumeMountSources.get(volumeName);
+			try {
+				byte[] objectBytes = objectMapper.writeValueAsBytes(volumeMountSource);
+				VolumeMount volumeMount = objectMapper.readValue(objectBytes, VolumeMount.class);
+				if (Objects.isNull(volumeMount.getReadOnly())) {
+					volumeMount.setReadOnly(Boolean.valueOf(true));
+				}
+				return volumeMount;
+			} catch (Exception e) {
+				LOG.error("Generate VolumeMounts error{}", e.getMessage());
+				throw new RuntimeException("Generate VolumeMounts error");
+			}
+		}).collect(Collectors.toList());
+	}
+
+	public static List<Volume> parseVolumesWithPrefix(String prefix, Configuration flinkConfig) {
+		HashMap<String, Map<String, String>> volumeSources = new HashMap();
+
+		for (String key : flinkConfig.keySet()) {
+			if (StringUtils.startsWith(key, prefix) && StringUtils.contains(key, Constants.VOLUME_OPTIONS_KEY)) {
+				String[] contents = StringUtils.split(key, ".");
+				String volumeType = contents[3];
+				String volumeName = contents[4];
+				String optionName = contents[6];
+				ConfigOption configOption = ConfigOptions.key(key).stringType().noDefaultValue();
+				String optionValue = flinkConfig.getString(configOption);
+
+				Map<String, String> volumeInfo = volumeSources.computeIfAbsent(volumeName, k -> new HashMap<String, String>(){
+					{put(Constants.VOLUME_TYPE_KEY, volumeType);}
+				});
+				volumeInfo.put(optionName, optionValue);
+			}
+		}
+
+		if (volumeSources.isEmpty()) {
+			return new ArrayList();
+		}
+
+		List<Volume> customVolumes = generateVolumes(volumeSources);
+		return customVolumes;
+	}
+
+	private static List<Volume> generateVolumes(HashMap<String, Map<String, String>> volumeSources) {
+		return volumeSources.keySet().stream().map(volumeName -> {
+			Map<String, String> volumeSource = volumeSources.get(volumeName);
+			String volumeType = volumeSource.get(Constants.VOLUME_TYPE_KEY);
+			try {
+				return createVolumeByType(volumeName, volumeType, volumeSource);
+			} catch (Exception e) {
+				LOG.error("Generate Volumes error{}", e.getMessage());
+				throw new RuntimeException("Generate Volumes error");
+			}
+		}).collect(Collectors.toList());
+	}
+
+	private static Volume createVolumeByType(String volumeName, String volumeType, Map<String, String> volumeSourceMap) throws Exception {
+
+		ObjectMapper objectMapper = new ObjectMapper();
+		byte[] objectBytes = objectMapper.writeValueAsBytes(volumeSourceMap);
+		switch (volumeType) {
+			case "nfs":
+				NFSVolumeSource NFSvolumeSource = objectMapper.readValue(objectBytes, NFSVolumeSource.class);
+				return new VolumeBuilder().withName(volumeName).withNfs(NFSvolumeSource).build();
+			case "persistentVolumeClaim":
+				PersistentVolumeClaimVolumeSource PVCvolumeSource = objectMapper.readValue(objectBytes, PersistentVolumeClaimVolumeSource.class);
+				return new VolumeBuilder().withName(volumeName).withPersistentVolumeClaim(PVCvolumeSource).build();
+			case "configMap":
+				ConfigMapVolumeSource CMvolumeSource = objectMapper.readValue(objectBytes, ConfigMapVolumeSource.class);
+				return new VolumeBuilder().withName(volumeName).withConfigMap(CMvolumeSource).build();
+			default:
+				throw new UnsupportedOperationException("Not implemented volumeType");
+		}
 	}
 
 	/**

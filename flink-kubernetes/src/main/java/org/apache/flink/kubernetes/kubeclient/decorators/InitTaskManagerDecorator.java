@@ -18,6 +18,11 @@
 
 package org.apache.flink.kubernetes.kubeclient.decorators;
 
+import io.fabric8.kubernetes.api.model.Volume;
+
+import io.fabric8.kubernetes.api.model.VolumeMount;
+
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesTaskManagerParameters;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesToleration;
@@ -51,6 +56,11 @@ public class InitTaskManagerDecorator extends AbstractKubernetesStepDecorator {
 
 	@Override
 	public FlinkPod decorateFlinkPod(FlinkPod flinkPod) {
+		Configuration flinkConfiguration = kubernetesTaskManagerParameters.getFlinkConfiguration();
+		List<Volume> customVolumes = KubernetesUtils.parseVolumesWithPrefix(
+			Constants.KUBERNETES_TASK_MANAGER_VOLUMES_PREFIX,
+			flinkConfiguration);
+
 		final Pod basicPod = new PodBuilder(flinkPod.getPod())
 			.withApiVersion(Constants.API_VERSION)
 			.editOrNewMetadata()
@@ -59,6 +69,7 @@ public class InitTaskManagerDecorator extends AbstractKubernetesStepDecorator {
 				.withAnnotations(kubernetesTaskManagerParameters.getAnnotations())
 				.endMetadata()
 			.editOrNewSpec()
+				.withVolumes(customVolumes)
 				.withRestartPolicy(Constants.RESTART_POLICY_OF_NEVER)
 				.withImagePullSecrets(kubernetesTaskManagerParameters.getImagePullSecrets())
 				.withNodeSelector(kubernetesTaskManagerParameters.getNodeSelector())
@@ -77,6 +88,11 @@ public class InitTaskManagerDecorator extends AbstractKubernetesStepDecorator {
 	}
 
 	private Container decorateMainContainer(Container container) {
+		Configuration flinkConfiguration = kubernetesTaskManagerParameters.getFlinkConfiguration();
+		List<VolumeMount> customVolumeMounts = KubernetesUtils.parseVolumeMountsWithPrefix(
+			Constants.KUBERNETES_TASK_MANAGER_VOLUMES_PREFIX,
+			flinkConfiguration);
+
 		final ResourceRequirements resourceRequirements = KubernetesUtils.getResourceRequirements(
 				kubernetesTaskManagerParameters.getTaskManagerMemoryMB(),
 				kubernetesTaskManagerParameters.getTaskManagerCPU(),
@@ -87,6 +103,7 @@ public class InitTaskManagerDecorator extends AbstractKubernetesStepDecorator {
 				.withImage(kubernetesTaskManagerParameters.getImage())
 				.withImagePullPolicy(kubernetesTaskManagerParameters.getImagePullPolicy().name())
 				.withResources(resourceRequirements)
+				.withVolumeMounts(customVolumeMounts)
 				.withPorts(new ContainerPortBuilder()
 					.withName(Constants.TASK_MANAGER_RPC_PORT_NAME)
 					.withContainerPort(kubernetesTaskManagerParameters.getRPCPort())

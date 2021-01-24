@@ -18,6 +18,11 @@
 
 package org.apache.flink.kubernetes.kubeclient.decorators;
 
+import io.fabric8.kubernetes.api.model.Volume;
+
+import io.fabric8.kubernetes.api.model.VolumeMount;
+
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesToleration;
@@ -58,6 +63,12 @@ public class InitJobManagerDecorator extends AbstractKubernetesStepDecorator {
 
 	@Override
 	public FlinkPod decorateFlinkPod(FlinkPod flinkPod) {
+
+		Configuration flinkConfiguration = kubernetesJobManagerParameters.getFlinkConfiguration();
+		List<Volume> customVolumes = KubernetesUtils.parseVolumesWithPrefix(
+			Constants.KUBERNETES_JOB_MANAGER_VOLUMES_PREFIX,
+			flinkConfiguration);
+
 		final Pod basicPod = new PodBuilder(flinkPod.getPod())
 			.withApiVersion(API_VERSION)
 			.editOrNewMetadata()
@@ -65,6 +76,7 @@ public class InitJobManagerDecorator extends AbstractKubernetesStepDecorator {
 				.withAnnotations(kubernetesJobManagerParameters.getAnnotations())
 				.endMetadata()
 			.editOrNewSpec()
+				.withVolumes(customVolumes)
 				.withServiceAccountName(kubernetesJobManagerParameters.getServiceAccount())
 				.withImagePullSecrets(kubernetesJobManagerParameters.getImagePullSecrets())
 				.withNodeSelector(kubernetesJobManagerParameters.getNodeSelector())
@@ -83,6 +95,11 @@ public class InitJobManagerDecorator extends AbstractKubernetesStepDecorator {
 	}
 
 	private Container decorateMainContainer(Container container) {
+		Configuration flinkConfiguration = kubernetesJobManagerParameters.getFlinkConfiguration();
+		List<VolumeMount> customVolumeMounts = KubernetesUtils.parseVolumeMountsWithPrefix(
+			Constants.KUBERNETES_JOB_MANAGER_VOLUMES_PREFIX,
+			flinkConfiguration);
+
 		final ResourceRequirements requirements = KubernetesUtils.getResourceRequirements(
 				kubernetesJobManagerParameters.getJobManagerMemoryMB(),
 				kubernetesJobManagerParameters.getJobManagerCPU(),
@@ -94,6 +111,7 @@ public class InitJobManagerDecorator extends AbstractKubernetesStepDecorator {
 				.withImagePullPolicy(kubernetesJobManagerParameters.getImagePullPolicy().name())
 				.withResources(requirements)
 				.withPorts(getContainerPorts())
+				.withVolumeMounts(customVolumeMounts)
 				.withEnv(getCustomizedEnvs())
 				.addNewEnv()
 					.withName(ENV_FLINK_POD_IP_ADDRESS)
